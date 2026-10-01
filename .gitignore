@@ -1,0 +1,5 @@
+.qoder/
+node_modules/
+nul
+NUL
+*.log

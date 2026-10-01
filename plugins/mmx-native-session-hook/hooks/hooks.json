@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/relay.mjs\"",
+            "commandWindows": "node \"${PLUGIN_ROOT}\\scripts\\relay.mjs\"",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "mmx-native-session-hook",
+  "displayName": "Workflow Native Session Hook",
+  "version": "0.1.0",
+  "description": "Tags workflow engine run commands with the exact native session id so the workflow progress plugin can attribute runs without guessing. Observation-only relay; never grants or denies permissions.",
+  "author": {
+    "name": "tcflying"
+  },
+  "category": "productivity",
+  "exampleQueries": [
+    "在当前会话运行一个动态工作流并把它归属到本会话"
+  ],
+  "apps": [],
+  "mcpServers": [],
+  "skills": [],
+  "hooks": [
+    "hooks/hooks.json"
+  ]
+}

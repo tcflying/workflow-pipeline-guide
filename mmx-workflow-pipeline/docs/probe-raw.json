@@ -1,0 +1,96 @@
+{
+  "url": "app://./archon",
+  "title": "MiniMax Code",
+  "at": "2026-09-28T13:05:36.406Z",
+  "localStorage": {
+    "ok": true,
+    "length": 49
+  },
+  "sessionRow": {
+    "selector": "[data-session-id]",
+    "count": 438,
+    "attrs": [
+      "data-session-id",
+      "data-mmxdwf-run"
+    ],
+    "titleSelector": "span.w-0.flex-1.text-sm.truncate",
+    "samples": [
+      {
+        "sessionId": "mvs_faa161fe5b9b4f268df128a8a682c21c",
+        "active": null,
+        "text": "对比多个 codex 集成 ChatGPT 的项目Read codex-with-chatgpt and chat-on-steroidsRead webcodex and codexpro repos",
+        "outerHTML": "<div data-session-id=\"mvs_faa161fe5b9b4f268df128a8a682c21c\"><div class=\"mavis-dropdown undefined\" data-sidebar-keep-open=\"true\"><div class=\"ant-dropdown-trigger group relative rounded-lg\"><button type=\"button\" data-shortcut-session-target=\"mvs_faa161fe5b9b4f268df128a8a682c21c\" data-session-rename-trigger=\"mvs_faa161fe5b9b4f268df128a8a682c21c\" data-sidebar-dismiss=\"true\" class=\"w-full flex items-center gap-2 pl-2 pr-0.5 h-[30px] text-left transition-colors rounded-lg bg-bg_interaction_tertiary_hover text-text_default_primary\" data-shortcut-session-active=\"true\"><div class=\"min-w-0 flex-1 transition-all mr-2 group-hover:mr-[60px] group-focus-within:mr-[60px]\"><div class=\"flex items-center gap-2\"><span role=\"button\" data-pinned-no-drag=\"true\" data-sidebar-keep-open=\"true\" class=\"flex-shrink-0 items-center justify-center cursor-pointer flex\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" fi"
+      },
+      {
+        "sessionId": "mvs_76da0d5ebc2c4110aa3c0306fa3cdb16",
+        "active": null,
+        "text": "Browserbase-推广软文",
+        "outerHTML": "<div data-session-id=\"mvs_76da0d5ebc2c4110aa3c0306fa3cdb16\"><div class=\"mavis-dropdown undefined\" data-sidebar-keep-open=\"true\"><div class=\"ant-dropdown-trigger group relative rounded-lg\"><button type=\"button\" data-shortcut-session-target=\"mvs_76da0d5ebc2c4110aa3c0306fa3cdb16\" data-session-rename-trigger=\"mvs_76da0d5ebc2c4110aa3c0306fa3cdb16\" data-sidebar-dismiss=\"true\" class=\"w-full flex items-center gap-2 pl-2 pr-0.5 h-[30px] text-left transition-colors rounded-lg text-text_default_primary hover:bg-bg_interaction_tertiary_hover\"><div class=\"min-w-0 flex-1 transition-all mr-2 group-hover:mr-[60px] group-focus-within:mr-[60px]\"><div class=\"flex items-center gap-2\"><span class=\"flex flex-shrink-0 items-center justify-center h-[18px] w-[18px] text-icon_default_tertiary \"><span class=\"block h-[7px] w-[7px] rounded-full border-[1.1px] border-current\"></span></span><span class=\"w-0 flex-1 tex"
+      },
+      {
+        "sessionId": "mvs_4fce133109d645f382662b9cd5155365",
+        "active": null,
+        "text": "汇总免费额度文章链接",
+        "outerHTML": "<div data-session-id=\"mvs_4fce133109d645f382662b9cd5155365\"><div class=\"mavis-dropdown undefined\" data-sidebar-keep-open=\"true\"><div class=\"ant-dropdown-trigger group relative rounded-lg\"><button type=\"button\" data-shortcut-session-target=\"mvs_4fce133109d645f382662b9cd5155365\" data-session-rename-trigger=\"mvs_4fce133109d645f382662b9cd5155365\" data-sidebar-dismiss=\"true\" class=\"w-full flex items-center gap-2 pl-2 pr-0.5 h-[30px] text-left transition-colors rounded-lg text-text_default_primary hover:bg-bg_interaction_tertiary_hover\"><div class=\"min-w-0 flex-1 transition-all mr-2 group-hover:mr-[60px] group-focus-within:mr-[60px]\"><div class=\"flex items-center gap-2\"><span class=\"flex flex-shrink-0 items-center justify-center h-[18px] w-[18px] text-icon_default_tertiary \"><span class=\"block h-[7px] w-[7px] rounded-full border-[1.1px] border-current\"></span></span><span class=\"w-0 flex-1 tex"
+      },
+      {
+        "sessionId": "mvs_4501bbd0571a4353ace240e0414773b6",
+        "active": null,
+        "text": "分析 atlas 多 Agent 协作文章内容",
+        "outerHTML": "<div data-session-id=\"mvs_4501bbd0571a4353ace240e0414773b6\"><div class=\"mavis-dropdown undefined\" data-sidebar-keep-open=\"true\"><div class=\"ant-dropdown-trigger group relative rounded-lg\"><button type=\"button\" data-shortcut-session-target=\"mvs_4501bbd0571a4353ace240e0414773b6\" data-session-rename-trigger=\"mvs_4501bbd0571a4353ace240e0414773b6\" data-sidebar-dismiss=\"true\" class=\"w-full flex items-center gap-2 pl-2 pr-0.5 h-[30px] text-left transition-colors rounded-lg text-text_default_primary hover:bg-bg_interaction_tertiary_hover\"><div class=\"min-w-0 flex-1 transition-all mr-2 group-hover:mr-[60px] group-focus-within:mr-[60px]\"><div class=\"flex items-center gap-2\"><span role=\"button\" data-pinned-no-drag=\"true\" data-sidebar-keep-open=\"true\" class=\"flex-shrink-0 items-center justify-center cursor-pointer flex\"><span class=\"group-hover:hidden\"><span class=\"flex flex-shrink-0 items-center ju"
+      }
+    ]
+  },
+  "groupRow": {
+    "selector": "[data-testid=\"sidebar-session-group\"]",
+    "headerSelector": "[data-project-header]",
+    "attr": "data-workspace-dir",
+    "workspaceDir": "G:\\mmx-project\\s69-claude239",
+    "projectKey": "workspace:G:\\mmx-project\\s69-claude239",
+    "titleText": "s69-claude239",
+    "outerHTML": "<div class=\"space-y-px\" data-testid=\"sidebar-session-group\" data-workspace-dir=\"G:\\mmx-project\\s69-claude239\" data-project-key=\"workspace:G:\\mmx-project\\s69-claude239\"><div class=\"mavis-dropdown undefined\" data-sidebar-keep-open=\"true\"><div role=\"button\" tabindex=\"0\" aria-label=\"s69-claude239, G:\\mmx-project\\s69-claude239\" aria-expanded=\"false\" data-project-header=\"workspace:G:\\mmx-project\\s69-claude239\" class=\"group/project-header flex h-[30px] cursor-pointer items-center gap-2 rounded-lg pl-2 pr-0.5 text-left transition-colors hover:bg-bg_interaction_tertiary_hover focus:outline-none focus-visible:bg-bg_interaction_tertiary_hover ant-dropdown-trigger\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 20 20\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"flex-shrink-0 text-icon_default_secondary\"><path d=\"M7.50586 2.5C7.95942 2.50007 8.39502 2.68035 8.71582 3.00098L10.0439 4.3291C10.1397 "
+  },
+  "rowsWithGroup": 432,
+  "messageList": {
+    "selector": "[data-testid=\"message-list\"]",
+    "cls": "message-container-viewport scrollbar-hide relative h-full w-full overflow-y-scroll overflow-x-hidden",
+    "clientH": 808,
+    "clientW": 661,
+    "scrollH": 4529,
+    "tidChain": [
+      "message-list",
+      "chat-panel-messages-surface",
+      "chat-main-conversation",
+      "chat-main-column",
+      "chat-main-column"
+    ],
+    "outerHTML": "<div id=\"message-container\" data-testid=\"message-list\" class=\"message-container-viewport scrollbar-hide relative h-full w-full overflow-y-scroll overflow-x-hidden\" style=\"overflow-anchor: none;\"><div id=\"mmxdwf-run-card\" data-mmxdwf-set=\"mmxdwf-selftest-1790600253671:2026-09-28T12:57:33.671Z:running|final935:2026-09-27T22:44:20.037Z:failed\"><div data-mmxdwf-card=\"1\" data-run=\"mmxdwf-selftest-1790600253671\"><div class=\"mmxdwf-head\"><span class=\"mmxdwf-title\"><span class=\"mmxdwf-gear\">⚙</span>工作流运"
+  },
+  "homeContent": "absent",
+  "scrollers": [
+    {
+      "tid": "message-list",
+      "chain": [
+        "message-list",
+        "chat-panel-messages-surface",
+        "chat-main-conversation",
+        "chat-main-column",
+        "chat-main-column"
+      ],
+      "w": 661,
+      "h": 808,
+      "sh": 4529
+    },
+    {
+      "tid": "sidebar-scroll-fade-viewport",
+      "chain": [
+        "sidebar-scroll-fade-viewport",
+        "sidebar-scroll-fade",
+        "sidebar-base-card"
+      ],
+      "w": 388,
+      "h": 724,
+      "sh": 8938
+    }
+  ]
+}

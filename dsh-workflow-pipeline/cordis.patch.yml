@@ -1,0 +1,11 @@
+# Host half of the workflow-pipeline plugin: one cordis service that serves the
+# progress API consumed by the client bundle (client.js).
+- insert:
+    - id: dsh-workflow-pipeline
+      name: "@dsh-external/dsh-workflow-pipeline"
+      inject: [webServer]
+      config:
+        roots:
+          - G:/qoder-intl-project/else
+          - G:/qoder-intl-project/dsh团队版
+          - G:/zcode-project

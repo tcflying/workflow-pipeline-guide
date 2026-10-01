@@ -1,0 +1,8 @@
+{
+  "name": "dynamic-workflow",
+  "version": "0.8.0",
+  "description": "Write a throwaway orchestration script, fan the work out across isolated subagents, keep the intermediate output out of the main context.",
+  "author": { "name": "tcflying" },
+  "skills": "./skills",
+  "commands": "./commands"
+}
