@@ -7,11 +7,11 @@
 //      apiFetch(path, opts), which adds X-Workflow-Capability from the closure-local
 //      capability placeholder (single literal, substituted by sidecar.mjs at inject
 //      time). The capability never appears in a URL, storage, logs or a readable global.
-//   3) DOM selectors from D1 (docs/dom-probe.md); the CURRENT SESSION is read from
-//      [data-shortcut-session-active="true"][data-shortcut-session-target] when the host
-//      exposes it. Measured 3.1.0 does NOT (currentSessionId() is always '' there), so
-//      every cur-dependent surface has a no-marker fallback; the session picker names the
-//      session explicitly — never guessed from titles or cwd basenames.
+//   3) DOM selectors from D1 (docs/dom-probe.md); the CURRENT SESSION is read from the host's
+//      own per-tab session state (sessionStorage 'mavis:activeSessionId', first) and only then
+//      from [data-shortcut-session-active="true"][data-shortcut-session-target] when the host
+//      exposes it. Both are the host telling us which session is active — we never guess from
+//      titles or cwd basenames, and every cur-dependent surface has a no-session fallback.
 //   4) every dwf- prefix -> mmxdwf- (style id, card id, modal id, data-* attrs, localStorage key)
 // Identity (runKey||runId + startedAt lifecycle), phase semantics, single-flight polling,
 // modal generations, teardown, artifact handling and explicit run→session binding match
@@ -19,7 +19,7 @@
 // compact single-line agent capsules in columns, script as the first cell, board at the
 // card bottom.
 (function () {
-	var CLIENT_VERSION = 8;
+	var CLIENT_VERSION = 9;
 	if (window.__mmxDwfInstalled && window.__mmxDwfVersion >= CLIENT_VERSION) return;
 	if (window.__mmxDwfInstalled && typeof window.__mmxDwfTeardown === 'function') window.__mmxDwfTeardown();
 	['mmxdwf-modal', 'mmxdwf-pipeline-style'].forEach(function (id) { var old = document.getElementById(id); if (old) old.remove(); });
@@ -108,12 +108,27 @@
 	}
 
 	// ---------- session adapter ----------
-	// Hosts that expose the active shortcut marker (D1: [data-shortcut-session-active="true"]
-	// [data-shortcut-session-target]) get the one-click current-session surfaces. Measured
-	// 3.1.0 has no such marker, so currentSessionId() is always '' there and every
-	// cur-dependent surface falls back (v8). '' means "no verifiable current session";
-	// no guessing.
+	// The host writes the active session id into its own per-tab session state
+	// (sessionStorage['mavis:activeSessionId'], measured on 3.1.0) and the sidebar row of that
+	// session is additionally marked in the DOM. sessionStorage is the FIRST source because it
+	// is the current-session state itself: the DOM marker only exists while the active row is
+	// actually rendered, so it can be missing (row collapsed) or stale (virtualized list) and
+	// would make the one-click surfaces flicker on and off. When the two disagree the host's
+	// state wins. A missing key, an unreadable storage, or a value that is not a session id
+	// counts as "not available" — we fall back to the DOM marker and, failing that, return ''
+	// ("no verifiable current session"), never a guess.
+	var ACTIVE_SESSION_KEY = 'mavis:activeSessionId';
+	var SESSION_ID_RE = /^mvs_[0-9a-f]{32}$/;
+	function storedSessionId() {
+		try {
+			if (typeof sessionStorage === 'undefined' || !sessionStorage) return '';
+			var v = sessionStorage.getItem(ACTIVE_SESSION_KEY);
+			return v && SESSION_ID_RE.test(v) ? v : '';
+		} catch (e) { return ''; }
+	}
 	function currentSessionId() {
+		var stored = storedSessionId();
+		if (stored) return stored;
 		var el = document.querySelector('[data-shortcut-session-active="true"][data-shortcut-session-target]');
 		return el ? (el.getAttribute('data-shortcut-session-target') || '') : '';
 	}
@@ -124,10 +139,18 @@
 				var valid = native && typeof native === 'object' && !Array.isArray(native)
 					&& typeof native.sessionId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(native.sessionId)
 					&& ((native.host === 'dsh' && native.source === 'native-shell') || (native.host === 'mmx' && native.source === 'native-hook'));
-				return valid ? { host: native.host, sessionId: native.sessionId, native: true } : { host: '', sessionId: '', native: true, invalid: true };
+				return valid ? { host: native.host, sessionId: native.sessionId, source: native.source, native: true } : { host: '', sessionId: '', source: '', native: true, invalid: true };
 			}
 			var manual = bindings[identity(run)];
-			return manual && typeof manual.sessionId === 'string' ? { host: 'mmx', sessionId: manual.sessionId } : null;
+			if (!manual || typeof manual.sessionId !== 'string') return null;
+			// v9: read the origin the record carries instead of synthesizing host:'mmx' on every
+			// read. A record without host/source predates the field; the storage key belongs to
+			// this client alone and its only writer was the session picker, so those stay valid.
+			// A record that names a DIFFERENT origin is not ours and is ignored outright — it must
+			// not be relabelled as an mmx picker binding (foreign attribution stays isolated).
+			if (manual.host == null && manual.source == null) return { host: 'mmx', sessionId: manual.sessionId, source: 'mmx-picker' };
+			if (manual.host !== 'mmx' || manual.source !== 'mmx-picker') return null;
+			return { host: manual.host, sessionId: manual.sessionId, source: manual.source };
 		}
 	function bindRunToSession(run, sid) {
 		if (!run || !sid || run.hostSession != null) return;
@@ -139,10 +162,10 @@
 		try { sweepSidebar(); } catch (e) {}
 		try { sweepCard(); } catch (e) {}
 	}
-	// 024-R4 续: the 3.1.0 build exposes no active-session marker at all, so the one-click
-	// "bind current session" can never appear. The sidebar rows themselves DO carry a stable
-	// data-session-id, so the user can name the session explicitly — that is still a deliberate
-	// user action, never a guess, which is the whole point of the attribution contract.
+	// 024-R4 续: the sidebar rows themselves carry a stable data-session-id, so the user can
+	// name the session explicitly — that is still a deliberate user action, never a guess,
+	// which is the whole point of the attribution contract. It is also the ONLY entry on a
+	// host that exposes no verifiable current session at all.
 	function sidebarSessions() {
 		var out = [];
 		var seen = {};
@@ -169,9 +192,15 @@
 		});
 		return out;
 	}
-		function openSessionPicker(run) {
-			var rid = identity(run);
-			var view = beginView('bindpick', rid);
+	// Where the picker was opened from decides what a completed bind does: a picker opened from
+	// a global-history row returns to that list (the user keeps the runs they were working
+	// through), a picker opened from a card foot closes the modal and leaves the conversation
+	// card, whose sidebar line is now painted.
+	var pickerFromHistory = false;
+	function openSessionPicker(run, fromHistory) {
+		var rid = identity(run);
+		beginView('bindpick', rid);
+		pickerFromHistory = !!fromHistory;
 			mTitle.textContent = '绑定到会话 · ' + (run.name || rid);
 			mBody.innerHTML = '';
 			var list = sidebarSessions();
@@ -223,7 +252,6 @@
 			filter.addEventListener('input', paint);
 			paint();
 			try { filter.focus(); } catch (e) {}
-			void view;
 		}
 	function unbindRun(run) {
 		if (!run || run.hostSession != null) return;
@@ -335,6 +363,8 @@
 		+ '[data-mmxdwf-card] .mmxdwf-logs .mmxdwf-logline.fresh{animation:mmxdwf-fadein .6s ease;}'
 		+ '[data-mmxdwf-card] .mmxdwf-more{display:block;background:none;border:none;color:var(--wf-muted);font-size:11px;cursor:pointer;padding:2px 0;margin-top:4px;text-align:left;font-family:inherit;}'
 		+ '[data-mmxdwf-card] .mmxdwf-more:hover{color:var(--wf-strong);text-decoration:underline;}'
+		+ '[data-mmxdwf-banner] .mmxdwf-more{display:inline;background:none;border:none;color:var(--wf-accent);font-size:12px;cursor:pointer;padding:0;font-family:inherit;}'
+		+ '[data-mmxdwf-banner] .mmxdwf-more:hover{color:var(--wf-strong);text-decoration:underline;}'
 		+ '[data-mmxdwf-card] .mmxdwf-result{cursor:pointer;}'
 		+ '[data-mmxdwf-card] .mmxdwf-result:hover{border-color:rgba(255,255,255,.16);}'
 		+ '[data-mmxdwf-card] .mmxdwf-ico.mmxdwf-resume:hover{color:#7ab8ff;}'
@@ -355,16 +385,23 @@
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:hover{color:var(--wf-strong);border-color:rgba(255,255,255,.22);}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:disabled{opacity:.5;cursor:default;}'
 		+ '[data-mmxdwf-card] .mmxdwf-offline{display:flex;gap:8px;align-items:center;background:rgba(255,113,105,.08);border:1px solid rgba(255,113,105,.35);border-radius:10px;padding:8px 12px;margin:2px 2px 12px;font-size:12px;color:var(--wf-failure);flex-wrap:wrap;}'
+		+ '[data-mmxdwf-banner] .mmxdwf-offline{margin:2px 2px 12px;}'
 		+ '[data-mmxdwf-card] .mmxdwf-unbound{display:inline-flex;align-items:center;margin-left:8px;font-size:10.5px;color:var(--wf-muted);border:1px dashed var(--wf-border);border-radius:999px;padding:1px 8px;white-space:nowrap;}'
 		+ '[data-mmxdwf-card] .mmxdwf-notice{color:var(--wf-accent);font-size:12px;margin-top:8px;}'
+		+ '[data-mmxdwf-banner] .mmxdwf-notice{color:var(--wf-accent);font-size:12px;margin-top:2px;}'
 		+ '[data-mmxdwf-card] .mmxdwf-foot{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}';
 
-	CSS += '[data-mmxdwf-card],#' + MODAL_ID + ',[data-mmxdwf-line]{--wf-text:#d7d9de;--wf-strong:#eceef2;--wf-muted:#a0a4af;--wf-surface:#1a1b20;--wf-subtle:rgba(255,255,255,.035);--wf-border:rgba(255,255,255,.10);--wf-inset:rgba(0,0,0,.22);--wf-ask:#ffce8a;--wf-success:#3fca68;--wf-failure:#ff7169;--wf-accent:#ffb13d;}'
-		+ '[data-mmxdwf-theme="light"] [data-mmxdwf-card],[data-mmxdwf-theme="light"] #' + MODAL_ID + ',[data-mmxdwf-theme="light"] [data-mmxdwf-line]{--wf-text:#343944;--wf-strong:#20242d;--wf-muted:#596273;--wf-surface:#ffffff;--wf-subtle:#f6f7f9;--wf-border:#dce1e8;--wf-inset:#f0f2f5;--wf-ask:#855100;--wf-success:#21783e;--wf-failure:#ba3029;--wf-accent:#956000;}'
+	// The banner container is a direct child of the card HOST, which carries no
+	// [data-mmxdwf-card] attribute of its own — it wraps N cards and must not inherit the card
+	// box. Without its own scope the theme variables and the notice/button rules below never
+	// match, and the P0-3 global-history entry renders as unstyled default browser controls.
+	CSS += '[data-mmxdwf-card],[data-mmxdwf-banner],#' + MODAL_ID + ',[data-mmxdwf-line]{--wf-text:#d7d9de;--wf-strong:#eceef2;--wf-muted:#a0a4af;--wf-surface:#1a1b20;--wf-subtle:rgba(255,255,255,.035);--wf-border:rgba(255,255,255,.10);--wf-inset:rgba(0,0,0,.22);--wf-ask:#ffce8a;--wf-success:#3fca68;--wf-failure:#ff7169;--wf-accent:#ffb13d;}'
+		+ '[data-mmxdwf-theme="light"] [data-mmxdwf-card],[data-mmxdwf-theme="light"] [data-mmxdwf-banner],[data-mmxdwf-theme="light"] #' + MODAL_ID + ',[data-mmxdwf-theme="light"] [data-mmxdwf-line]{--wf-text:#343944;--wf-strong:#20242d;--wf-muted:#596273;--wf-surface:#ffffff;--wf-subtle:#f6f7f9;--wf-border:#dce1e8;--wf-inset:#f0f2f5;--wf-ask:#855100;--wf-success:#21783e;--wf-failure:#ba3029;--wf-accent:#956000;}'
 		+ '[data-mmxdwf-theme="light"] [data-mmxdwf-card]{box-shadow:0 2px 8px rgba(25,35,50,.07);}'
 		+ '[data-mmxdwf-card] .mmxdwf-qsend{background:#ffb13d;color:#241703;}'
 		+ '[data-mmxdwf-card] .mmxdwf-qsend:disabled,[data-mmxdwf-card] .mmxdwf-ico:disabled{opacity:.65;cursor:default;}'
 		+ '[data-mmxdwf-card] .mmxdwf-error{color:var(--wf-failure);font-size:12px;overflow-wrap:anywhere;margin-top:8px;}'
+		+ '[data-mmxdwf-banner] .mmxdwf-error{color:var(--wf-failure);font-size:12px;overflow-wrap:anywhere;margin-top:8px;}'
 		+ '[data-mmxdwf-card] .mmxdwf-stats{white-space:normal;}'
 		+ '[data-mmxdwf-card] .mmxdwf-ico:focus-visible,[data-mmxdwf-card] .mmxdwf-pill:focus-visible{outline:2px solid var(--wf-accent);outline-offset:2px;}';
 	function syncTheme() {
@@ -430,6 +467,19 @@
 	function runById(id) {
 		for (var i = 0; i < runs.length; i++) if (identity(runs[i]) === id) return runs[i];
 		return null;
+	}
+	// A run is resolvable from the polled list, or — while the global-history modal holds its
+	// snapshot — from that snapshot. The history rows and the picker they open must survive the
+	// poll that drops a finished run out of /runs: resolving them against the live list only
+	// made those two paths dead (the modal's lifecycle check tore the picker down within one
+	// tick, and the row click resolved to nothing and silently did nothing).
+	function historyRunById(id) {
+		for (var i = 0; i < historyRuns.length; i++) if (identity(historyRuns[i]) === id) return historyRuns[i];
+		return null;
+	}
+	function resolveRun(id) {
+		if (!id) return null;
+		return runById(String(id)) || historyRunById(String(id));
 	}
 	function uniqueRunId(runId) {
 		var n = 0;
@@ -720,12 +770,12 @@
 	// the fallback is attribution-safe: only unbound runs the user is already watching —
 	// never other sessions' runs and never an auto-introduced "newest finished" card
 	// (024-R4: the old global fallback put finished cards on the new-conversation page).
-	// v8: binding no longer deletes the card. On 3.1.0 (no active-session marker, cur is
-	// always '') the strict "cur must match" rule made every bound run vanish from the
-	// conversation view the moment it was bound — the user lost the card they just acted on.
-	// A manual binding is a deliberate action on a run the user can see, so a mmx-host
-	// binding keeps the card in view; the cur-match rule still narrows the pool when the
-	// host does expose a current session.
+	// v8: binding no longer deletes the card. When the host reports no current session at all
+	// (neither sessionStorage nor the marker) the strict "cur must match" rule made every bound
+	// run vanish from the conversation view the moment it was bound — the user lost the card
+	// they had just acted on. A manual binding is a deliberate action on a run the user can
+	// see, so a mmx-host binding keeps the card in view; the cur-match rule still narrows the
+	// pool whenever the host does report a current session.
 	function sessionPool() {
 		var cur = currentSessionId();
 		return runs.filter(function (r) {
@@ -812,10 +862,10 @@
 		}
 		if (persistWarning) html += '<div class="mmxdwf-error" role="alert">' + esc(persistWarning) + '</div>';
 		var cur = currentSessionId();
-			// v8: the notice must not require an active-session marker. On 3.1.0 (cur always
-			// '') this was the only global-history entry besides the card pill, and the cur
-			// gate made it unreachable whenever no card was on screen — finished runs that
-			// were never watched live had no surface at all on this host.
+			// v8: the notice must not require a current session. It is the only global-history
+			// entry besides the card pill, and gating it on cur made it unreachable whenever no
+			// card was on screen — finished runs that were never watched live then had no
+			// surface at all.
 			if (runs.length && pickCount === 0) html += '<div class="mmxdwf-notice" role="status">' + (cur ? '当前会话暂无绑定的运行 · ' : '暂无正在展示的运行 · ') + '<button class="mmxdwf-more" data-act="history">打开全局历史绑定…</button></div>';
 			return html;
 	}
@@ -899,18 +949,15 @@
 			return;
 		}
 		if (act === 'bindpick') {
+			// Card-foot entry: the picker opens over the conversation, so a completed bind
+			// closes the modal again (pickerFromHistory stays false).
 			if (!run) return;
 			openSessionPicker(run);
 			return;
 		}
-		if (act === 'bindpickrow') {
-			var picked = runById(t.getAttribute('data-run') || '');
-			var sid = t.getAttribute('data-sid') || '';
-			if (!picked || !sid) return;
-			bindRunToSession(picked, sid);
-			if (mEl && mEl.style.display === 'flex') { mEl.style.display = 'none'; revokeModalBlobs(); }
-			return;
-		}
+		// The picker's session rows live in the modal, which is mounted on document.body — the
+		// clicks never bubble to the card host, so the modal's own listener owns 'bindpickrow'
+		// and duplicating it here would be an unreachable second implementation.
 		if (act === 'answer') {
 			if (!run) return;
 			var state = controlsFor(run), qId = t.getAttribute('data-q');
@@ -1021,43 +1068,47 @@
 		mBody = mEl.querySelector('.mmxdwf-mbody');
 		mEl.addEventListener('click', function (ev) {
 			var t = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
-			if (t && t.getAttribute('data-act') === 'bindpickrow') {
+			var act = t ? t.getAttribute('data-act') : '';
+			if (act === 'bindpickrow') {
 				// The picker lives in the modal, whose listener owns clicks here (the card host
-				// never sees them). Bind, then close so the sidebar line is visible at once.
-				var pickedRun = runById(t.getAttribute('data-run') || '');
+				// never sees them). The picked run may live only in the history snapshot, so it
+				// resolves through resolveRun like every other binding path.
+				var pickedRun = resolveRun(t.getAttribute('data-run') || '');
 				var pickedSid = t.getAttribute('data-sid') || '';
 				if (!pickedRun || !pickedSid) return;
 				bindRunToSession(pickedRun, pickedSid);
-				mEl.style.display = 'none';
-				revokeModalBlobs();
+				if (pickerFromHistory) renderHistory(); else closeModal();
 				return;
 			}
-			if (t && t.getAttribute('data-act') === 'bindpick') {
-				// v8: the history rows of a marker-less host open the same picker as the
-				// card foot; the picked run may only exist in historyRuns, so resolve there too.
+			if (act === 'bindpick') {
+				// The history rows open the same picker as the card foot; the run is usually
+				// only in historyRuns, and finishing the bind returns to this list.
 				var pid = t.getAttribute('data-hrun');
 				if (!pid) return;
-				var prun = runById(pid);
-				if (!prun) { for (var pi = 0; pi < historyRuns.length; pi++) if (identity(historyRuns[pi]) === pid) { prun = historyRuns[pi]; break; } }
-				if (prun) openSessionPicker(prun);
+				var prun = resolveRun(pid);
+				if (prun) openSessionPicker(prun, true);
 				return;
 			}
-			if (t && (t.getAttribute('data-act') === 'bindcurrent' || t.getAttribute('data-act') === 'unbindcurrent')) {
+			if (act === 'bindcurrent' || act === 'unbindcurrent') {
 				var id = t.getAttribute('data-hrun');
-				var r = runById(id);
-				if (!r) { for (var i = 0; i < historyRuns.length; i++) if (identity(historyRuns[i]) === id) { r = historyRuns[i]; break; } }
-				if (t.getAttribute('data-act') === 'bindcurrent') {
+				var r = resolveRun(id);
+				if (act === 'bindcurrent') {
 					var cur = currentSessionId();
 					if (cur && r) bindRunToSession(r, cur);
 				} else if (r) unbindRun(r);
 				if (mEl && mEl.style.display === 'flex') renderHistory();
 				return;
 			}
-			if (ev.target === mEl || (t && t.getAttribute('data-act') === 'mclose')) {
-				mEl.style.display = 'none';
-				revokeModalBlobs();
-			}
+			if (ev.target === mEl || act === 'mclose') closeModal();
 		});
+	}
+	// Closing the modal also drops the global-history snapshot: the history rows and the picker
+	// they open resolve runs through it, and a stale copy kept resolving runs that have since
+	// left /runs (and stayed resident for the rest of the session).
+	function closeModal() {
+		if (mEl) mEl.style.display = 'none';
+		revokeModalBlobs();
+		historyRuns = [];
 	}
 	// Every modal open records (generation, view type, run identity); a late response is
 	// applied only when the modal still shows the same view of the same run.
@@ -1065,13 +1116,13 @@
 		ensureModal();
 		revokeModalBlobs();
 		modalGen++;
-		var run = id == null ? null : runById(String(id));
+		var run = id == null ? null : resolveRun(id);
 		modalView = { gen: modalGen, type: type, id: id == null ? null : String(id), startedAt: run ? String(run.startedAt || '') : null };
 		return modalView;
 	}
 	function invalidateModalLifecycle() {
 		if (!modalView || modalView.id === null) return;
-		var run = runById(modalView.id);
+		var run = resolveRun(modalView.id);
 		if (run && String(run.startedAt || '') === modalView.startedAt) return;
 		modalView = null;
 		revokeModalBlobs();
@@ -1275,7 +1326,7 @@
 	// ---- full agent/log lists (truncation must always have a full view) ----
 	function openAgentsFull(run) {
 		var rid = identity(run);
-		var view = beginView('agents', rid);
+		beginView('agents', rid); // recorded for the lifecycle guard; the list renders synchronously
 		mTitle.textContent = '子代理 · ' + (run.name || rid);
 		mBody.innerHTML = '';
 		var latest = runById(rid) || run;
@@ -1294,7 +1345,7 @@
 	}
 	function openLogsFull(run) {
 		var rid = identity(run);
-		var view = beginView('logs', rid);
+		beginView('logs', rid); // recorded for the lifecycle guard; the list renders synchronously
 		mTitle.textContent = '日志 · ' + (run.name || rid);
 		mBody.innerHTML = '';
 		var latest = runById(rid) || run;
@@ -1349,16 +1400,18 @@
 			btns.style.gap = '6px';
 			var bindBtn = document.createElement('button');
 			if (!cur) {
-				// 3.1.0 has no active-session marker, so "bind current session" can never fire
-				// here — rendering it disabled would be a dead control (and would leave
-				// finished runs permanently unattributable). The picker names the session
-				// explicitly instead, straight from the history row.
+				// With no verifiable current session "bind current session" can never fire —
+				// rendering it disabled would be a dead control (and would leave finished runs
+				// permanently unattributable). The picker names the session explicitly instead,
+				// straight from the history row. A native (or quarantined) run is excluded on
+				// both branches: bindRunToSession refuses it, so offering the button would be
+				// the same dead control the cur branch already avoids.
 				bindBtn.className = 'mmxdwf-hbtn';
 				bindBtn.setAttribute('data-act', 'bindpick');
 				bindBtn.setAttribute('data-hrun', rid);
 				bindBtn.textContent = '🔗 选择会话…';
-				bindBtn.title = '该构建未暴露活动会话标记，请从侧栏会话列表中选择要归属的会话';
-				btns.appendChild(bindBtn);
+				bindBtn.title = '当前会话未知，请从侧栏会话列表中选择要归属的会话';
+				if (!binding || !binding.native) btns.appendChild(bindBtn);
 			} else {
 				bindBtn.className = 'mmxdwf-hbtn';
 				bindBtn.setAttribute('data-act', 'bindcurrent');
@@ -1460,12 +1513,17 @@
 		try { console.error('[mmxdwf] ' + msg); } catch (e2) {}
 	}
 	// Per-run UI state is pruned to the surviving run list so long sessions do not
-	// accumulate controls, log markers, result caches and visible ids forever (024-R4).
+	// accumulate controls, log markers, result caches, script texts and visible ids forever
+	// (024-R4). scriptCache is keyed by identity+startedAt, so the surviving keys are rebuilt
+	// from the live runs rather than split out of the cache key.
 	function prunePerRunState() {
 		var liveIds = new Set(runs.map(function (r) { return identity(r); }));
 		controls.forEach(function (_, id) { if (!liveIds.has(id)) controls.delete(id); });
 		lastLogCount.forEach(function (_, id) { if (!liveIds.has(id)) lastLogCount.delete(id); });
 		resultCache.forEach(function (_, id) { if (!liveIds.has(id)) resultCache.delete(id); });
+		var liveScriptKeys = {};
+		runs.forEach(function (r) { liveScriptKeys[identity(r) + ':' + String(r.startedAt || '')] = 1; });
+		for (var k in scriptCache) if (!Object.prototype.hasOwnProperty.call(scriptCache, k) || !liveScriptKeys[k]) delete scriptCache[k];
 		var before = visibleRuns.size;
 		visibleRuns.forEach(function (id) { if (!liveIds.has(id)) visibleRuns.delete(id); });
 		if (visibleRuns.size !== before) saveVisible();
@@ -1535,10 +1593,14 @@
 			});
 			restoreAnchor();
 			revokeModalBlobs();
+			historyRuns = [];
 			var modal = document.getElementById(MODAL_ID);
 			if (modal) modal.remove();
 			var style = document.getElementById(STYLE_ID);
 			if (style) style.remove();
+			// The theme attribute is ours alone (no host selector reads it): leaving it behind
+			// would keep a stale palette marker on <html> after the injection stopped.
+			try { if (document.documentElement && document.documentElement.removeAttribute) document.documentElement.removeAttribute('data-mmxdwf-theme'); } catch (e) {}
 			mEl = null; mTitle = null; mBody = null; modalView = null;
 			window.__mmxDwfInstalled = false;
 			delete window.__mmxDwfInternals;
@@ -1554,13 +1616,14 @@
 	// MiniMax Code has no module lifecycle; start immediately (once, thanks to the marker).
 	start();
 
-	// Extension point for the pending session-binding integration: the seams a row-slot
-	// adapter can plug into are exposed here (capability is NOT exposed).
+	// Read-only seam for the pending session-binding integration: a row-slot adapter can ask
+	// which session a run belongs to (capability is NOT exposed, and neither is any mutator).
+	// Bind/unbind exist ONLY as the result of a click inside our own picker/modal — exposing
+	// them on a writable global would let any page script mint a binding record that is
+	// indistinguishable on disk from one the user actually made.
 	window.__mmxDwfInternals = {
 		identity: identity,
 		currentSessionId: currentSessionId,
 		bindingOf: bindingOf,
-		bindRunToSession: bindRunToSession,
-		unbindRun: unbindRun,
 	};
 })();

@@ -202,3 +202,52 @@ P1 一批：选择器标题污染（`row.textContent` 会把已注入的进度�
 - 选择器筛选框的像素观感仍无截图。
 - 原生 hook 自动归属、mmx-status 冲突评估：等主上决策，状态不变。
 
+## R7：一条被推翻的前提 —— 活动会话标记其实存在（2026-10-03）
+
+### 实测
+
+在准备真实点击验收时，探针读到卡片底部渲染的是「🔗 **绑定当前会话**」而不是 v8 的「🔗 选择会话…」——说明 `currentSessionId()` 非空。追查（脚本 `mmx-r7-marker-crosscheck.mjs`，输出 `mmx-r7-marker-crosscheck-output.txt`，可复跑）：
+
+```
+[r7-marker] DOM marker count: 1
+[r7-marker] DOM marker target: mvs_9c844ef5c52c427f96e14c7fd4e0b786
+[r7-marker] host sessionStorage mavis:activeSessionId: mvs_9c844ef5c52c427f96e14c7fd4e0b786
+[r7-marker] VERDICT: MATCH — marker is trustworthy (one-click bind safe)
+[r7-marker] marked session title: ⭐dsh团队版
+[r7-marker] marker element tag/class: BUTTON :: mavis-sidebar-item w-full flex items-center gap-2 pl-2 pr-0.5 h-[30px]
+[r7-marker] sidebar rows total: 558
+[r7-marker] card affordance now: bind=🔗 绑定当前会话
+```
+
+**结论：R3 起的「3.1.0 不暴露活动会话标记 → `cur` 恒为空」这条前提不成立。**
+
+- 标记元素是侧栏会话行 `button.mavis-sidebar-item` 上的 `data-shortcut-session-active="true"` + `data-shortcut-session-target`。
+- 其值与宿主自己写在 `sessionStorage['mavis:activeSessionId']` 的当前会话**逐字符一致** → 标记可信，一键绑定不会错绑。
+- 版本没变（`MiniMax Code.exe` ProductVersion **3.0.74.168**，LastWriteTime 2026-09-27 22:39），所以不是升级带来的。
+- 早前测到"零个标记"的最可能解释：该标记**只在活动会话行被渲染进 DOM 时存在**（侧栏虚拟化 / 折叠 / 该行不在渲染窗口内时元素不存在），且当天 `document.hasFocus()` 为 false。这解释了为什么同一构建两次测量结果相反。
+
+### 由此产生的三个结论
+
+1. **一键「🔗 绑定当前会话」在本宿主真实可用**（R5 的 P0-2/P0-3 修复针对的"无 cur 兜底"不再是唯一路径，而是标记缺失时的兜底）。v8 的兜底代码**没有白写**——标记会随侧栏渲染出现/消失，两条路径都真实生效，禁止删除 cur 主路径。
+2. **一条真实的确定性缺陷**：一键绑定的可用性随侧栏渲染状态抖动——活动会话行不在 DOM 时按钮消失，宿主其实知道当前会话（sessionStorage 一直在）。修法（已交付工作流执行）：`currentSessionId()` 改为**先读 `sessionStorage['mavis:activeSessionId']`**（宿主每标签页都写，与侧栏渲染无关），取不到再回退 DOM 标记，两者皆无才返回空串；冲突时以 sessionStorage 为准；值必须匹配 `/^mvs_[0-9a-f]{32}$/`，非法值按取不到处理（绝不猜）。三条测试覆盖。
+3. **对 R5 审计结论的修正**：R5 把"无活动会话标记"当成宿主事实写进了验收与记忆，事实层面需按本节更正。归属契约本身没被破坏——两条路径都是用户显式动作，marker 值的可信度也已用宿主自身状态交叉验证。
+
+### R6 工作流（主上令「必须完美」→ 派工作流复盘并修到完美）
+
+工作流 `dwfrun-2c860d36`（中途因 R7 实测推翻前提而修补重跑为 `dwfrun-8242ebd8`）：两位独立评审员换眼复审 → 每条发现派独立复核员只读重推 → 修复工程师处置 → `node --test` 九文件全量门禁 → 现场取证与外来注入器冲突评估并行 → 报告经独立审读后发布。**13 条候选发现，13 条独立复核全部确认（驳回 0）**，修复 14 项（含 R7 指定的 sessionStorage 改进），放弃 2 项。
+
+主会话终审（不采信子代理绿灯自述，亲自复核代码与回归）：
+
+- `CLIENT_VERSION = 9`；`currentSessionId()` 已改为 `storedSessionId()`（sessionStorage `mavis:activeSessionId`，值须过 `SESSION_ID_RE`）优先、DOM 标记回退、try/catch 兜底 —— `client-inject.js:122-134`。
+- **cur 主路径未被删除**（我明令禁止的那条）：`currentSessionId()` 仍有 7 处调用，`bindcurrent` / `unbindcurrent` 两分支俱在（`:1092`、`:1417`、`:1425`）。
+- 原生/无效绑定行的按钮守卫已补：两个分支都加了 `if (!binding || !binding.native)`（`:1411`、`:1418`）——发现 1 确认属实且已修。
+- `bindingOf` 运行时归因对象补上 `source` 字段（`:142`、`:144+`），读侧开始真正消费 `manual.host` / `manual.source`——发现 5 已修。
+- **主会话独立复跑全量：`276/276 通过`**（`full-024-r6-v9-mainsession.log`），与工作流第 2 轮绿灯一致。
+- 部署：核对 4231 属主 PID 58396 = `sidecar.mjs --root G:/qoder-intl-project/else` 后重启换装；现场探针 `mmx-r7-v9-verify-output.txt`：`injected version: 9`、`cur 解析结果: mvs_9c844ef5…`（与宿主 sessionStorage 一致）、卡片渲染「🔗 绑定当前会话」、能力串扫描 `clean`。
+
+**放弃的 2 项及理由**（修复工程师判定，主会话复核认可）：手动绑定记录永不修剪（`bindings` 无自动修剪）——因为 sidecar 的 `/runs` 本身也没有保留期、运行目录通常长期存在，清理钩子几乎不触发；文档侧"历史行选择器留在历史视图"的描述不符——实际实现是绑定后关闭弹窗（代码注释自陈 `Bind, then close so the sidebar line is visible at once`），**该描述已在本节更正为"绑定后关闭弹窗"**。
+
+### 本轮仍然做不到的事
+
+- **真实点击验收无法在本会话完成**：官方 Computer Use 控制器在上一轮验收结束时已被 `stop()`（该动作终止本会话的电脑控制，需新会话才可用），且按纪律不得改用自建 CDP 点击桥。所以 R5/R7 的点击路径仍只有测试与只读探针证据。演示运行 `mmx-demo2-20261002-183531-jhk` 已挂在 ask 上（`q000-a0622bad`）等待主上在真实窗口点一次「❓回答」即可完成该验收。
+
