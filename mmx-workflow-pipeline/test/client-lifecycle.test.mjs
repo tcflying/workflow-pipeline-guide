@@ -180,7 +180,7 @@ test('MMX: a newer injected bundle replaces the old lifecycle and remains idempo
   f.sandbox.__mmxDwfVersion = 2;
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
-  assert.equal(f.sandbox.__mmxDwfVersion, 5);
+  assert.equal(f.sandbox.__mmxDwfVersion, 6);
   assert.equal(f.doc.getElementById('mmxdwf-modal'), null);
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
@@ -932,6 +932,52 @@ for (const client of clients) {
     assert.equal((f.docListeners.visibilitychange || []).length, 0, 'teardown must release the visibility listener');
   });
 }
+
+// ---------- 024-R4 续: MMX 无活动标记时的显式会话选择绑定 ----------
+test('MMX: without an active-session marker the card offers a session picker that binds and draws the sidebar line', async () => {
+  // Measured on the live 3.1.0 build: the active marker is absent entirely, so the one-click
+  // "bind current session" can never appear. Picking a row explicitly is still a user action,
+  // so attribution stays verifiable — the run lands under the session the user chose.
+  const f = fixture(mmx, [run('pick-me', 'running')]);
+  const mkRow = (sid, title) => { const r = f.doc.createElement('div'); r.setAttribute('data-session-id', sid); r.textContent = title; f.doc.body.appendChild(r); return r; };
+  const rowA = mkRow('447987372052656', '第一个会话');
+  const rowB = mkRow('447683061084721', '第二个会话');
+  await f.tick();
+  assert.equal(f.doc.querySelector('[data-act="bind"]'), null, 'one-click bind needs a verifiable current session');
+  assert.ok(f.doc.querySelector('[data-act="bindpick"]'), 'the picker entry must exist without an active marker');
+
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  const rows = f.doc.querySelectorAll('.mmxdwf-srow');
+  assert.equal(rows.length, 2, 'the picker lists every sidebar session');
+  assert.ok(rows[0].textContent.includes('第一个会话'));
+  rows[1].dispatch('click'); await f.tick();
+  assert.equal(JSON.parse(f.storage.get('mmxdwf-session-bindings'))['pick-me'].sessionId, '447683061084721', 'the chosen session id is what gets bound');
+  assert.ok(rowB.querySelector('[data-mmxdwf-line]'), 'the sidebar line appears on the chosen row');
+  assert.equal(rowA.querySelector('[data-mmxdwf-line]'), null, 'and never on any other row');
+  assert.equal(f.doc.querySelector('[data-act="bindpick"]'), null, 'a bound run offers no further binding');
+});
+
+test('MMX: the session picker re-lists current sidebar sessions instead of a stale snapshot', async () => {
+  const f = fixture(mmx, [run('pick-live', 'running')]);
+  const early = f.doc.createElement('div'); early.setAttribute('data-session-id', 'sid-early'); early.textContent = '早的会话';
+  f.doc.body.appendChild(early);
+  await f.tick();
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 1);
+  f.doc.querySelector('[data-act="mclose"]').dispatch('click');
+  const late = f.doc.createElement('div'); late.setAttribute('data-session-id', 'sid-late'); late.textContent = '新的会话';
+  f.doc.body.appendChild(late);
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  assert.deepEqual(f.doc.querySelectorAll('.mmxdwf-srow').map((r) => r.textContent.trim()), ['早的会话', '新的会话'],
+    'sessions added after the first open must be selectable');
+});
+
+test('MMX: an empty sidebar keeps the picker usable and explains itself', async () => {
+  const f = fixture(mmx, [run('pick-empty', 'running')]);
+  await f.tick();
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  assert.match(f.doc.querySelector('.mmxdwf-mbody').textContent, /没有可绑定的会话|暂无会话/);
+});
 
 test('DSH: the client module declares the services it touches for Cordis inject', async () => {
   const source = readFileSync(dsh.path, 'utf8');

@@ -17,7 +17,7 @@
 // compact single-line agent capsules in columns, script as the first cell, board at the
 // card bottom.
 (function () {
-	var CLIENT_VERSION = 5;
+	var CLIENT_VERSION = 6;
 	if (window.__mmxDwfInstalled && window.__mmxDwfVersion >= CLIENT_VERSION) return;
 	if (window.__mmxDwfInstalled && typeof window.__mmxDwfTeardown === 'function') window.__mmxDwfTeardown();
 	['mmxdwf-modal', 'mmxdwf-pipeline-style'].forEach(function (id) { var old = document.getElementById(id); if (old) old.remove(); });
@@ -130,6 +130,49 @@
 		saveBindings();
 		try { sweepSidebar(); } catch (e) {}
 		try { sweepCard(); } catch (e) {}
+	}
+	// 024-R4 续: the 3.1.0 build exposes no active-session marker at all, so the one-click
+	// "bind current session" can never appear. The sidebar rows themselves DO carry a stable
+	// data-session-id, so the user can name the session explicitly — that is still a deliberate
+	// user action, never a guess, which is the whole point of the attribution contract.
+	function sidebarSessions() {
+		var out = [];
+		var seen = {};
+		document.querySelectorAll(SESSION_ROW_SEL).forEach(function (row) {
+			var sid = (row.getAttribute && row.getAttribute(SESSION_ID_ATTR)) || '';
+			if (!sid || seen[sid]) return;
+			seen[sid] = 1;
+			var title = (row.textContent || '').replace(/\s+/g, ' ').trim();
+			out.push({ sessionId: sid, title: title || sid });
+		});
+		return out;
+	}
+	function openSessionPicker(run) {
+		var rid = identity(run);
+		var view = beginView('bindpick', rid);
+		mTitle.textContent = '绑定到会话 · ' + (run.name || rid);
+		mBody.innerHTML = '';
+		var list = sidebarSessions();
+		if (!list.length) {
+			mBody.innerHTML = '<div class="mmxdwf-stats">没有可绑定的会话（侧栏未列出任何带 data-session-id 的会话行）</div>';
+			return;
+		}
+		var head = document.createElement('div');
+		head.className = 'mmxdwf-stats';
+		head.textContent = '选择这个运行要归属的会话 · 共 ' + list.length + ' 个';
+		mBody.appendChild(head);
+		list.forEach(function (s) {
+			var row = document.createElement('button');
+			row.className = 'mmxdwf-srow';
+			row.setAttribute('data-act', 'bindpickrow');
+			row.setAttribute('data-sid', s.sessionId);
+			row.setAttribute('data-run', rid);
+			row.type = 'button';
+			row.textContent = s.title;
+			row.title = s.sessionId;
+			mBody.appendChild(row);
+		});
+		void view;
 	}
 	function unbindRun(run) {
 		if (!run || run.hostSession != null) return;
@@ -251,6 +294,8 @@
 		+ '#' + MODAL_ID + ' .mmxdwf-hid{color:var(--wf-muted);font-size:11px;}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hmeta{margin-left:auto;color:var(--wf-muted);font-size:11px;white-space:nowrap;}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hcalls{padding:4px 12px 10px;font-size:11.5px;color:var(--wf-muted);}'
+		+ '#' + MODAL_ID + ' .mmxdwf-srow{display:block;width:100%;text-align:left;font:12px/1.5 inherit;color:var(--wf-text);background:var(--wf-subtle);border:1px solid var(--wf-border);border-radius:10px;padding:9px 12px;margin:6px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+		+ '#' + MODAL_ID + ' .mmxdwf-srow:hover{color:var(--wf-strong);border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.065);}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn{font-size:11px;border:1px solid var(--wf-border);background:var(--wf-subtle);color:var(--wf-text);border-radius:8px;padding:3px 9px;cursor:pointer;flex:none;}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:hover{color:var(--wf-strong);border-color:rgba(255,255,255,.22);}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:disabled{opacity:.5;cursor:default;}'
@@ -610,6 +655,7 @@
 			+ '<button class="mmxdwf-pill" data-act="result">📄 结果</button>'
 			+ '<button class="mmxdwf-pill" data-act="history">🗂 历史</button>'
 			+ (cur && !bound ? '<button class="mmxdwf-pill" data-act="bind" title="把该运行绑定到当前会话">🔗 绑定当前会话</button>' : '')
+			+ (!cur && !bound ? '<button class="mmxdwf-pill" data-act="bindpick" title="选择这个运行要归属的会话">🔗 选择会话…</button>' : '')
 			+ '</div>'
 			+ '</div>';
 	}
@@ -787,6 +833,19 @@
 			bindRunToSession(run, cur);
 			return;
 		}
+		if (act === 'bindpick') {
+			if (!run) return;
+			openSessionPicker(run);
+			return;
+		}
+		if (act === 'bindpickrow') {
+			var picked = runById(t.getAttribute('data-run') || '');
+			var sid = t.getAttribute('data-sid') || '';
+			if (!picked || !sid) return;
+			bindRunToSession(picked, sid);
+			if (mEl && mEl.style.display === 'flex') { mEl.style.display = 'none'; revokeModalBlobs(); }
+			return;
+		}
 		if (act === 'answer') {
 			if (!run) return;
 			var state = controlsFor(run), qId = t.getAttribute('data-q');
@@ -897,6 +956,17 @@
 		mBody = mEl.querySelector('.mmxdwf-mbody');
 		mEl.addEventListener('click', function (ev) {
 			var t = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
+			if (t && t.getAttribute('data-act') === 'bindpickrow') {
+				// The picker lives in the modal, whose listener owns clicks here (the card host
+				// never sees them). Bind, then close so the sidebar line is visible at once.
+				var pickedRun = runById(t.getAttribute('data-run') || '');
+				var pickedSid = t.getAttribute('data-sid') || '';
+				if (!pickedRun || !pickedSid) return;
+				bindRunToSession(pickedRun, pickedSid);
+				mEl.style.display = 'none';
+				revokeModalBlobs();
+				return;
+			}
 			if (t && (t.getAttribute('data-act') === 'bindcurrent' || t.getAttribute('data-act') === 'unbindcurrent')) {
 				var id = t.getAttribute('data-hrun');
 				var r = runById(id);
