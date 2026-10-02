@@ -19,7 +19,7 @@
 // compact single-line agent capsules in columns, script as the first cell, board at the
 // card bottom.
 (function () {
-	var CLIENT_VERSION = 10;
+	var CLIENT_VERSION = 11;
 	if (window.__mmxDwfInstalled && window.__mmxDwfVersion >= CLIENT_VERSION) return;
 	if (window.__mmxDwfInstalled && typeof window.__mmxDwfTeardown === 'function') window.__mmxDwfTeardown();
 	['mmxdwf-modal', 'mmxdwf-pipeline-style'].forEach(function (id) { var old = document.getElementById(id); if (old) old.remove(); });
@@ -388,7 +388,7 @@
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:hover{color:var(--wf-strong);border-color:rgba(255,255,255,.22);}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:disabled{opacity:.5;cursor:default;}'
 		+ '[data-mmxdwf-card] .mmxdwf-offline{display:flex;gap:8px;align-items:center;background:rgba(255,113,105,.08);border:1px solid rgba(255,113,105,.35);border-radius:10px;padding:8px 12px;margin:2px 2px 12px;font-size:12px;color:var(--wf-failure);flex-wrap:wrap;}'
-		+ '[data-mmxdwf-banner] .mmxdwf-offline{margin:2px 2px 12px;}'
+		+ '[data-mmxdwf-banner] .mmxdwf-offline{display:flex;gap:8px;align-items:center;background:rgba(255,113,105,.08);border:1px solid rgba(255,113,105,.35);border-radius:10px;padding:8px 12px;margin:2px 2px 12px;font-size:12px;color:var(--wf-failure);flex-wrap:wrap;}'
 		+ '[data-mmxdwf-card] .mmxdwf-unbound{display:inline-flex;align-items:center;margin-left:8px;font-size:10.5px;color:var(--wf-muted);border:1px dashed var(--wf-border);border-radius:999px;padding:1px 8px;white-space:nowrap;}'
 		+ '[data-mmxdwf-card] .mmxdwf-notice{color:var(--wf-accent);font-size:12px;margin-top:8px;}'
 		+ '[data-mmxdwf-banner] .mmxdwf-notice{color:var(--wf-accent);font-size:12px;margin-top:2px;}'
@@ -1079,7 +1079,7 @@
 				var pickedRun = resolveRun(t.getAttribute('data-run') || '');
 				var pickedSid = t.getAttribute('data-sid') || '';
 				if (!pickedRun || !pickedSid) return;
-				bindRunToSession(pickedRun, pickedSid);
+				bindRunToSession(pickedRun, pickedSid, 'mmx-picker');
 				if (pickerFromHistory) renderHistory(); else closeModal();
 				return;
 			}

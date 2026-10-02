@@ -257,6 +257,28 @@ P1 一批：选择器标题污染（`row.textContent` 会把已注入的进度�
 - 部署：核对 4231 属主 PID 17428 = `sidecar.mjs --root G:/qoder-intl-project/else` 后重启换装；现场 `mmx-r7-v10-verify-output.txt`：`injected version: 10`、能力串 `clean`、绑定存储为空。
 - **v9 那条修复的现场自证**：两次核验之间主上在 MMX 里切换了会话，`cur` 从 `mvs_9c844ef5…`（⭐dsh团队版）变成 `mvs_592c711b…`——sessionStorage 读取跟着真实导航变化，不再是停在旧值或随侧栏渲染抖动的量。这比任何测试都直接地证明了 v9 的价值。
 
+### v11：独立复核 v9/v10 新增代码（主会话自写代码的第一次独立复核）
+
+v9 与 v10 是主会话在工作流结束后自己写的代码，此前只经过自己写的测试，**没有任何独立视角看过**。按"必须完美"的标准这是缺口，故派独立复核员逐项审（只读、不跑命令、不连端口）。结论：六项里**五项成立、一项有缺陷**。
+
+**抓到的真缺陷（medium）**：banner 迁移那次只补了四个 CSS 规则中的三个 —— `[data-mmxdwf-banner] .mmxdwf-offline` 只写了 `margin`，**整条主体样式仍留在 `[data-mmxdwf-card]` 作用域内**。而 `.mmxdwf-offline` 是那个断连提示的唯一生产者、输出恒被包进 banner 容器 → **侧栏断连时「⚠ 连接中断」会完全裸奔**：没有红底、没有描边、没有圆角、没有 12px 字号、没有失败色，退化成一��继承宿主字体的普通文本。这正是那次迁移要修的同一类保真破损，被漏了一条。已补成完整副本，并加了断言把 `display`/`border`/`border-radius`/`color`/`font-size` 逐条钉死（此前无任何 `.mmxdwf-offline` 断言，所以才会漏改）。
+
+**顺手修的低危项**：`:1082` 选择器调用点靠默认值落成 `mmx-picker`，未显式传值——行为正确，但默认值一改就会静默错标 provenance，改为显式传参。
+
+**复核员确认成立、值得记下的几项**：
+- 原生绑定严格隔离**确实成立**——伪造路径只有 localStorage，而原生分支只读服务端下发的 `run.hostSession`，同源脚本无法经 localStorage 伪造原生归因。
+- `scriptCache` 修剪的键与写入端严格一致（同一 `identity()`、同一归一、同一分隔符），不会误删；`for...in` + `hasOwnProperty` 无原型污染；不会删掉在途请求正在用的条目（请求捕获的是键字符串，回填直读，删了最多下次重发）。
+- teardown 移除主题属性后重注入能正确重建（`syncTheme()` 排在 head 守卫之前，document-start 阶段 body 一到就恢复），且清理序列末尾两步不会因它抛错而被吞掉。
+- 复核员提出一条**推测性**风险：storage 无条件优先，若宿主在某些转场先更 DOM 后写 storage，storage 反而是旧的。**当前无实证**——现场两次核对 storage 与 DOM 标记完全一致（`mvs_592c711b…`、随后 `mvs_1feaae52…`，主上期间切换过会话），且两者同为主上导航的产物。按"不凭推测改代码"的纪律，**此项只记录不改动**。
+- 另有三处卫生项（冗余 `typeof` 守卫、写端不校验 source 白名单、被拒记录无法从 UI 清理）均无功能影响，记录不修。
+
+- 测试：**147/147 客户端**、**278/278 全量**（`full-024-r7-v11-mainsession.log`）。
+- 部署：核对 4231 属主 PID 26692 = `sidecar.mjs --root G:/qoder-intl-project/else` 后重启换装；现场 `mmx-r7-v11-verify-output.txt`：`injected version: 11`、banner 断连规则完整存在、能力串 `clean`。
+
+### DSH 端同类缺口（只读核实，未改动）
+
+`dsh-workflow-pipeline/client.js` 存在与 v9 前 MMX 端同形的残留：`scriptCache`（`:131`）无任何修剪、`historyRuns`（4 处引用）无清理。**主上已定"不再做其他 IDE 版本"，DSH 是否继续维护待主上决定**，故本轮只核实不改动。
+
 ### 本轮仍然做不到的事
 
 - **真实点击验收无法在本会话完成**：官方 Computer Use 控制器在上一轮验收结束时已被 `stop()`（该动作终止本会话的电脑控制，需新会话才可用），且按纪律不得改用自建 CDP 点击桥。所以 R5/R7 的点击路径仍只有测试与只读探针证据。演示运行 `mmx-demo2-20261002-183531-jhk` 已挂在 ask 上（`q000-a0622bad`）等待主上在真实窗口点一次「❓回答」即可完成该验收。

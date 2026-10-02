@@ -192,7 +192,7 @@ test('MMX: a newer injected bundle replaces the old lifecycle and remains idempo
   f.sandbox.__mmxDwfVersion = 2;
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
-  assert.equal(f.sandbox.__mmxDwfVersion, 10);
+  assert.equal(f.sandbox.__mmxDwfVersion, 11);
   assert.equal(f.doc.getElementById('mmxdwf-modal'), null);
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
@@ -1290,6 +1290,14 @@ test('MMX v9: the card-host banner carries its own stylesheet scope', async () =
   assert.match(css, /\[data-mmxdwf-theme="light"\] \[data-mmxdwf-banner\][^{]*\{--wf-text:#343944/, 'and the light palette as well');
   assert.match(css, /\[data-mmxdwf-banner\] \.mmxdwf-notice\{/, 'the notice text needs its scoped rule');
   assert.match(css, /\[data-mmxdwf-banner\] \.mmxdwf-more\{/, 'the global-history entry needs its scoped rule');
+  // The offline banner is produced inside the same host banner container, so every declaration
+  // it relies on must be scoped there too — a margin-only rule left it as unstyled host text.
+  const offline = /\[data-mmxdwf-banner\] \.mmxdwf-offline\{([^}]*)\}/.exec(css);
+  assert.ok(offline, 'the offline banner needs its own scoped rule');
+  for (const decl of ['display:flex', 'border:1px solid', 'border-radius:10px', 'color:var(--wf-failure)', 'font-size:12px']) {
+    assert.ok(offline[1].includes(decl), `the banner-scoped offline rule lost "${decl}"`);
+  }
+  assert.ok(/\[data-mmxdwf-banner\] \.mmxdwf-error\{/.test(css), 'the persistence-warning banner needs its scoped rule as well');
 });
 
 test('MMX v9: a persisted binding keeps the origin it recorded instead of being relabelled mmx', async () => {
