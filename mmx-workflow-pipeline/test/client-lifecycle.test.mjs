@@ -56,6 +56,13 @@ class Element {
   insertAdjacentHTML(where, html) { const tmp = this.doc.createElement('div'); tmp.innerHTML = html; tmp.children.slice().forEach((c) => this.appendChild(c)); }
   setAttribute(k, v) { this.attributes[k] = String(v); }
   getAttribute(k) { return this.attributes[k] ?? null; }
+  cloneNode(deep) {
+    const el = new Element(this.tagName, this.doc);
+    for (const [k, v] of Object.entries(this.attributes)) el.attributes[k] = v;
+    el._text = this._text || '';
+    if (deep !== false) this.children.forEach((c) => el.appendChild(c.cloneNode(true)));
+    return el;
+  }
   removeAttribute(k) { delete this.attributes[k]; }
   appendChild(el) { el.remove(); el.parentNode = this; this.children.push(el); return el; }
   insertBefore(el, before) { el.remove(); el.parentNode = this; const i = this.children.indexOf(before); this.children.splice(i < 0 ? this.children.length : i, 0, el); return el; }
@@ -180,7 +187,7 @@ test('MMX: a newer injected bundle replaces the old lifecycle and remains idempo
   f.sandbox.__mmxDwfVersion = 2;
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
-  assert.equal(f.sandbox.__mmxDwfVersion, 7);
+  assert.equal(f.sandbox.__mmxDwfVersion, 8);
   assert.equal(f.doc.getElementById('mmxdwf-modal'), null);
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
@@ -1040,6 +1047,79 @@ test('MMX: reopening the picker starts from a clean filter', async () => {
   f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
   assert.equal(f.doc.querySelector('.mmxdwf-filter').value, '', 'a stale query must not silently hide sessions');
   assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 2);
+});
+
+// ---------- v8: marker-less host (3.1.0) must stay fully usable ----------
+// Measured 3.1.0 has NO active-session marker: currentSessionId() is always ''. These tests
+// run with no data-shortcut-session-active element at all — the real production shape.
+
+test('MMX v8: binding keeps the card instead of deleting it (no active-session marker)', async () => {
+  const f = fixture(mmx, [run('bind-keep', 'running')]);
+  const row = f.doc.createElement('div');
+  row.setAttribute('data-session-id', 'sess-b');
+  row.textContent = '真实会话标题';
+  f.doc.body.appendChild(row);
+  await f.tick();
+  assert.ok(f.doc.querySelector('[data-run="bind-keep"]'), 'live card is up');
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  f.doc.querySelector('[data-act="bindpickrow"][data-sid="sess-b"]').dispatch('click'); await flush();
+  await f.tick(); await f.tick();
+  assert.ok(f.doc.querySelector('[data-run="bind-keep"]'), 'the card the user just bound must stay on screen');
+  assert.equal(f.doc.querySelector('[data-act="bindpick"]'), null, 'a bound run offers no further binding');
+  assert.ok(f.doc.querySelector('[data-mmxdwf-line]'), 'the sidebar line is painted');
+});
+
+test('MMX v8: history rows offer the session picker on a marker-less host', async () => {
+  const f = fixture(mmx, [run('hist-pick', 'completed')], { watched: false });
+  const row = f.doc.createElement('div');
+  row.setAttribute('data-session-id', 'sess-h');
+  row.textContent = '历史会话';
+  f.doc.body.appendChild(row);
+  await f.tick();
+  assert.equal(f.doc.querySelector('[data-run="hist-pick"]'), null, 'never-watched finished run stays out of the card view');
+  f.doc.querySelector('[data-act="history"]').dispatch('click'); await flush();
+  const dead = f.doc.querySelector('[data-act="bindcurrent"]');
+  const pick = [...f.doc.querySelectorAll('.mmxdwf-hrow')].flatMap((r) => [...r.querySelectorAll('[data-act="bindpick"]')])[0];
+  assert.equal(dead, null, 'the one-click bind must not render disabled on a host with no marker');
+  assert.ok(pick, 'the history row names the session via the picker instead');
+  pick.dispatch('click'); await flush();
+  f.doc.querySelector('[data-act="bindpickrow"][data-sid="sess-h"]').dispatch('click'); await flush();
+  const saved = JSON.parse(f.storage.get('mmxdwf-session-bindings'))['hist-pick'];
+  assert.ok(saved, 'binding from the history row persists');
+  assert.equal(saved.sessionId, 'sess-h');
+  assert.equal(saved.host, 'mmx');
+  assert.equal(saved.source, 'mmx-picker', 'the persisted record names its origin');
+});
+
+test('MMX v8: a finished run is reachable from global history even with no card on screen', async () => {
+  const f = fixture(mmx, [run('orphan-fin', 'completed')], { watched: false });
+  await f.tick();
+  assert.equal(f.doc.querySelector('[data-run="orphan-fin"]'), null, 'no card: never-watched finished run');
+  const notice = f.doc.querySelector('[data-act="history"]');
+  assert.ok(notice, 'with runs existing, the no-card view still names the global-history entry');
+  notice.dispatch('click'); await flush();
+  assert.ok(f.doc.querySelector('.mmxdwf-hrow'), 'the history modal lists the finished run');
+  assert.match(f.doc.querySelector('.mmxdwf-mbody').textContent, /orphan-fin/);
+});
+
+test('MMX v8: the picker reads titles without our injected progress line', async () => {
+  const f = fixture(mmx, [run('title-clean', 'running')]);
+  const row = f.doc.createElement('div');
+  row.setAttribute('data-session-id', 'sess-t');
+  const title = f.doc.createElement('span');
+  title.className = 'w-0 flex-1 text-sm truncate';
+  title.textContent = '排查 Codex 无法启动';
+  row.appendChild(title);
+  f.doc.body.appendChild(row);
+  await f.tick();
+  // simulate what a previous binding painted into that row: a progress line child
+  const line = f.doc.createElement('div');
+  line.setAttribute('data-mmxdwf-line', '1');
+  line.textContent = '⑂ 收尾阶段';
+  row.appendChild(line);
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  const entry = f.doc.querySelector('[data-act="bindpickrow"][data-sid="sess-t"]');
+  assert.equal(entry.textContent, '排查 Codex 无法启动', 'the picker title must not swallow the injected line text');
 });
 
 test('DSH: the client module declares the services it touches for Cordis inject', async () => {

@@ -8,8 +8,10 @@
 //      capability placeholder (single literal, substituted by sidecar.mjs at inject
 //      time). The capability never appears in a URL, storage, logs or a readable global.
 //   3) DOM selectors from D1 (docs/dom-probe.md); the CURRENT SESSION is read from
-//      [data-shortcut-session-active="true"][data-shortcut-session-target] — never
-//      guessed from titles or cwd basenames.
+//      [data-shortcut-session-active="true"][data-shortcut-session-target] when the host
+//      exposes it. Measured 3.1.0 does NOT (currentSessionId() is always '' there), so
+//      every cur-dependent surface has a no-marker fallback; the session picker names the
+//      session explicitly — never guessed from titles or cwd basenames.
 //   4) every dwf- prefix -> mmxdwf- (style id, card id, modal id, data-* attrs, localStorage key)
 // Identity (runKey||runId + startedAt lifecycle), phase semantics, single-flight polling,
 // modal generations, teardown, artifact handling and explicit run→session binding match
@@ -17,7 +19,7 @@
 // compact single-line agent capsules in columns, script as the first cell, board at the
 // card bottom.
 (function () {
-	var CLIENT_VERSION = 7;
+	var CLIENT_VERSION = 8;
 	if (window.__mmxDwfInstalled && window.__mmxDwfVersion >= CLIENT_VERSION) return;
 	if (window.__mmxDwfInstalled && typeof window.__mmxDwfTeardown === 'function') window.__mmxDwfTeardown();
 	['mmxdwf-modal', 'mmxdwf-pipeline-style'].forEach(function (id) { var old = document.getElementById(id); if (old) old.remove(); });
@@ -39,6 +41,7 @@
 	var SESSION_ROW_SEL = '[data-session-id]';                     // sidebar session row container
 	var SESSION_TITLE_SEL = 'span.w-0.flex-1.text-sm.truncate';    // title span inside a row
 	var SESSION_ID_ATTR = 'data-session-id';
+	var SIDEBAR_LINE_SEL = '[data-mmxdwf-line]';                   // our own injected progress line
 	// Conversation scroll host. The home route (new conversation) is positively identified by
 	// mavis-home-content with no message-list; it never carries conversation cards (024-R4).
 	var CONVERSATION_SEL = '[data-testid="message-list"]';
@@ -105,9 +108,11 @@
 	}
 
 	// ---------- session adapter ----------
-	// MiniMax Code exposes the current session via the active shortcut marker
-	// (D1: [data-shortcut-session-active="true"][data-shortcut-session-target]).
-	// '' means "no verifiable current session" -> global unbound view; no guessing.
+	// Hosts that expose the active shortcut marker (D1: [data-shortcut-session-active="true"]
+	// [data-shortcut-session-target]) get the one-click current-session surfaces. Measured
+	// 3.1.0 has no such marker, so currentSessionId() is always '' there and every
+	// cur-dependent surface falls back (v8). '' means "no verifiable current session";
+	// no guessing.
 	function currentSessionId() {
 		var el = document.querySelector('[data-shortcut-session-active="true"][data-shortcut-session-target]');
 		return el ? (el.getAttribute('data-shortcut-session-target') || '') : '';
@@ -126,7 +131,10 @@
 		}
 	function bindRunToSession(run, sid) {
 		if (!run || !sid || run.hostSession != null) return;
-		bindings[identity(run)] = { sessionId: String(sid), runId: run.runId || '', name: run.name || '', savedAt: new Date().toISOString() };
+		// v8: persist the attribution shape the contract names ({host, source}) — the
+		// record used to carry only {sessionId, runId, name}, so 'mmx' was synthesized
+		// on read and the origin of a binding was indistinguishable on disk.
+		bindings[identity(run)] = { host: 'mmx', source: 'mmx-picker', sessionId: String(sid), runId: run.runId || '', name: run.name || '', savedAt: new Date().toISOString() };
 		saveBindings();
 		try { sweepSidebar(); } catch (e) {}
 		try { sweepCard(); } catch (e) {}
@@ -142,7 +150,21 @@
 			var sid = (row.getAttribute && row.getAttribute(SESSION_ID_ATTR)) || '';
 			if (!sid || seen[sid]) return;
 			seen[sid] = 1;
-			var title = (row.textContent || '').replace(/\s+/g, ' ').trim();
+			// Prefer the dedicated title span; fall back to the row text minus our own
+			// injected progress line, so a bound row reads as its title, not
+			// "标题⑂阶段点 阶段名" (v8: textContent alone polluted every picker entry).
+			var clone = null;
+			try { clone = row.cloneNode(true); } catch (e) { clone = null; }
+			var title = '';
+			if (clone) {
+				var mine = clone.querySelectorAll ? clone.querySelectorAll(SIDEBAR_LINE_SEL) : [];
+				for (var i = 0; i < mine.length; i++) { if (mine[i].parentNode) mine[i].remove(); }
+				var span = clone.querySelector ? clone.querySelector(SESSION_TITLE_SEL) : null;
+				title = ((span && span.textContent) || clone.textContent || '').replace(/\s+/g, ' ').trim();
+			} else {
+				var span2 = row.querySelector ? row.querySelector(SESSION_TITLE_SEL) : null;
+				title = ((span2 && span2.textContent) || sid).replace(/\s+/g, ' ').trim();
+			}
 			out.push({ sessionId: sid, title: title || sid });
 		});
 		return out;
@@ -698,11 +720,17 @@
 	// the fallback is attribution-safe: only unbound runs the user is already watching —
 	// never other sessions' runs and never an auto-introduced "newest finished" card
 	// (024-R4: the old global fallback put finished cards on the new-conversation page).
+	// v8: binding no longer deletes the card. On 3.1.0 (no active-session marker, cur is
+	// always '') the strict "cur must match" rule made every bound run vanish from the
+	// conversation view the moment it was bound — the user lost the card they just acted on.
+	// A manual binding is a deliberate action on a run the user can see, so a mmx-host
+	// binding keeps the card in view; the cur-match rule still narrows the pool when the
+	// host does expose a current session.
 	function sessionPool() {
 		var cur = currentSessionId();
 		return runs.filter(function (r) {
 			var b = bindingOf(r);
-			if (b) return !!cur && b.host === 'mmx' && b.sessionId === cur;
+			if (b) return cur ? (b.host === 'mmx' && b.sessionId === cur) : b.host === 'mmx' && !b.native;
 			return isLive(r) || hasVisible(r);
 		});
 	}
@@ -784,8 +812,12 @@
 		}
 		if (persistWarning) html += '<div class="mmxdwf-error" role="alert">' + esc(persistWarning) + '</div>';
 		var cur = currentSessionId();
-				if (cur && runs.length && pickCount === 0) html += '<div class="mmxdwf-notice" role="status">当前会话暂无绑定的运行 · <button class="mmxdwf-more" data-act="history">打开全局历史绑定…</button></div>';
-				return html;
+			// v8: the notice must not require an active-session marker. On 3.1.0 (cur always
+			// '') this was the only global-history entry besides the card pill, and the cur
+			// gate made it unreachable whenever no card was on screen — finished runs that
+			// were never watched live had no surface at all on this host.
+			if (runs.length && pickCount === 0) html += '<div class="mmxdwf-notice" role="status">' + (cur ? '当前会话暂无绑定的运行 · ' : '暂无正在展示的运行 · ') + '<button class="mmxdwf-more" data-act="history">打开全局历史绑定…</button></div>';
+			return html;
 	}
 	function sweepCard() {
 		var host = document.getElementById(CARD_ID);
@@ -798,7 +830,7 @@
 		}
 		if (cardAnchor && !cardAnchor.isConnected) restoreAnchor();
 		var pick = pickCardRuns();
-		if (!pick.length && !offline && !persistWarning && !(currentSessionId() && runs.length)) {
+		if (!pick.length && !offline && !persistWarning && !runs.length) {
 			if (host) host.remove();
 			restoreAnchor();
 			return;
@@ -998,6 +1030,16 @@
 				bindRunToSession(pickedRun, pickedSid);
 				mEl.style.display = 'none';
 				revokeModalBlobs();
+				return;
+			}
+			if (t && t.getAttribute('data-act') === 'bindpick') {
+				// v8: the history rows of a marker-less host open the same picker as the
+				// card foot; the picked run may only exist in historyRuns, so resolve there too.
+				var pid = t.getAttribute('data-hrun');
+				if (!pid) return;
+				var prun = runById(pid);
+				if (!prun) { for (var pi = 0; pi < historyRuns.length; pi++) if (identity(historyRuns[pi]) === pid) { prun = historyRuns[pi]; break; } }
+				if (prun) openSessionPicker(prun);
 				return;
 			}
 			if (t && (t.getAttribute('data-act') === 'bindcurrent' || t.getAttribute('data-act') === 'unbindcurrent')) {
@@ -1306,15 +1348,24 @@
 			btns.style.display = 'inline-flex';
 			btns.style.gap = '6px';
 			var bindBtn = document.createElement('button');
-			bindBtn.className = 'mmxdwf-hbtn';
-			bindBtn.setAttribute('data-act', 'bindcurrent');
-			bindBtn.setAttribute('data-hrun', rid);
-			bindBtn.textContent = '绑定当前会话';
 			if (!cur) {
-				bindBtn.disabled = true;
-				bindBtn.title = '当前未检测到活动会话，无法绑定';
+				// 3.1.0 has no active-session marker, so "bind current session" can never fire
+				// here — rendering it disabled would be a dead control (and would leave
+				// finished runs permanently unattributable). The picker names the session
+				// explicitly instead, straight from the history row.
+				bindBtn.className = 'mmxdwf-hbtn';
+				bindBtn.setAttribute('data-act', 'bindpick');
+				bindBtn.setAttribute('data-hrun', rid);
+				bindBtn.textContent = '🔗 选择会话…';
+				bindBtn.title = '该构建未暴露活动会话标记，请从侧栏会话列表中选择要归属的会话';
+				btns.appendChild(bindBtn);
+			} else {
+				bindBtn.className = 'mmxdwf-hbtn';
+				bindBtn.setAttribute('data-act', 'bindcurrent');
+				bindBtn.setAttribute('data-hrun', rid);
+				bindBtn.textContent = '绑定当前会话';
+				if (!binding || !binding.native) btns.appendChild(bindBtn);
 			}
-			if (!binding || !binding.native) btns.appendChild(bindBtn);
 			if (binding && !binding.native) {
 				var unbindBtn = document.createElement('button');
 				unbindBtn.className = 'mmxdwf-hbtn';
