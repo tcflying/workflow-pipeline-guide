@@ -19,7 +19,7 @@
 // compact single-line agent capsules in columns, script as the first cell, board at the
 // card bottom.
 (function () {
-	var CLIENT_VERSION = 9;
+	var CLIENT_VERSION = 10;
 	if (window.__mmxDwfInstalled && window.__mmxDwfVersion >= CLIENT_VERSION) return;
 	if (window.__mmxDwfInstalled && typeof window.__mmxDwfTeardown === 'function') window.__mmxDwfTeardown();
 	['mmxdwf-modal', 'mmxdwf-pipeline-style'].forEach(function (id) { var old = document.getElementById(id); if (old) old.remove(); });
@@ -149,15 +149,18 @@
 			// A record that names a DIFFERENT origin is not ours and is ignored outright — it must
 			// not be relabelled as an mmx picker binding (foreign attribution stays isolated).
 			if (manual.host == null && manual.source == null) return { host: 'mmx', sessionId: manual.sessionId, source: 'mmx-picker' };
-			if (manual.host !== 'mmx' || manual.source !== 'mmx-picker') return null;
+			if (manual.host !== 'mmx' || (manual.source !== 'mmx-picker' && manual.source !== 'mmx-oneclick')) return null;
 			return { host: manual.host, sessionId: manual.sessionId, source: manual.source };
 		}
-	function bindRunToSession(run, sid) {
+	function bindRunToSession(run, sid, source) {
 		if (!run || !sid || run.hostSession != null) return;
 		// v8: persist the attribution shape the contract names ({host, source}) — the
 		// record used to carry only {sessionId, runId, name}, so 'mmx' was synthesized
 		// on read and the origin of a binding was indistinguishable on disk.
-		bindings[identity(run)] = { host: 'mmx', source: 'mmx-picker', sessionId: String(sid), runId: run.runId || '', name: run.name || '', savedAt: new Date().toISOString() };
+		// v10: the record now names WHICH deliberate action produced it. Both entry points are
+		// explicit user actions, so both are legitimate attribution — but stamping a one-click
+		// bind as 'mmx-picker' was false provenance on disk.
+		bindings[identity(run)] = { host: 'mmx', source: source === 'mmx-oneclick' ? 'mmx-oneclick' : 'mmx-picker', sessionId: String(sid), runId: run.runId || '', name: run.name || '', savedAt: new Date().toISOString() };
 		saveBindings();
 		try { sweepSidebar(); } catch (e) {}
 		try { sweepCard(); } catch (e) {}
@@ -945,7 +948,7 @@
 			if (!run) return;
 			var cur = currentSessionId();
 			if (!cur) return;
-			bindRunToSession(run, cur);
+			bindRunToSession(run, cur, 'mmx-oneclick');
 			return;
 		}
 		if (act === 'bindpick') {
@@ -1094,7 +1097,7 @@
 				var r = resolveRun(id);
 				if (act === 'bindcurrent') {
 					var cur = currentSessionId();
-					if (cur && r) bindRunToSession(r, cur);
+					if (cur && r) bindRunToSession(r, cur, 'mmx-oneclick');
 				} else if (r) unbindRun(r);
 				if (mEl && mEl.style.display === 'flex') renderHistory();
 				return;

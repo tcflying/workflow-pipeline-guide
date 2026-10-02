@@ -192,7 +192,7 @@ test('MMX: a newer injected bundle replaces the old lifecycle and remains idempo
   f.sandbox.__mmxDwfVersion = 2;
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
-  assert.equal(f.sandbox.__mmxDwfVersion, 9);
+  assert.equal(f.sandbox.__mmxDwfVersion, 10);
   assert.equal(f.doc.getElementById('mmxdwf-modal'), null);
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
@@ -1317,6 +1317,52 @@ test('MMX v9: a persisted binding keeps the origin it recorded instead of being 
   assert.equal(bindingOf({ runId: 'foreign' }), null, 'a foreign-origin record yields no binding at all');
   assert.equal(bindingOf({ runId: 'bogus' }), null, 'a record that did not come from the picker is not ours either');
   assert.equal(bindingOf({ runId: 'unbound' }), null);
+});
+
+test('MMX v10: the two binding entry points each record their own origin', async () => {
+  // Both are deliberate user actions, so both attribute — but the record must say WHICH one it
+  // was. v9 read the source and still wrote a constant, so a one-click bind was filed as a pick.
+  // The two entries are mutually exclusive on a card: one-click renders when the host reports a
+  // current session, the picker when it does not — so they are exercised in two worlds.
+  const SID = mvsId('a');
+  const withCur = fixture(mmx, [run('oneclick', 'running')]);
+  addSession(withCur, SID, '会话 X');
+  withCur.sandbox.sessionStorage.setItem(SESSION_STATE_KEY, SID);
+  await withCur.tick();
+  const oneClick = [...withCur.doc.querySelectorAll('[data-run="oneclick"]')].flatMap((c) => [...c.querySelectorAll('[data-act="bind"]')])[0];
+  assert.ok(oneClick, 'with a verifiable current session the card offers the one-click bind');
+  assert.equal([...withCur.doc.querySelectorAll('[data-run="oneclick"]')].flatMap((c) => [...c.querySelectorAll('[data-act="bindpick"]')]).length, 0,
+    'and not the picker at the same time');
+  oneClick.dispatch('click'); await flush();
+  const savedOne = JSON.parse(withCur.storage.get('mmxdwf-session-bindings'));
+  assert.equal(savedOne.oneclick.source, 'mmx-oneclick', 'a one-click bind must not be filed as a picker bind');
+  assert.equal(savedOne.oneclick.sessionId, SID);
+  assert.equal(withCur.sandbox.__mmxDwfInternals.bindingOf({ runId: 'oneclick' }).source, 'mmx-oneclick', 'and it reads back as such');
+  assert.ok(withCur.doc.querySelector('[data-session-id="' + SID + '"]').querySelector('[data-mmxdwf-line]'), 'the sidebar line lands on that session');
+
+  const noCur = fixture(mmx, [run('picked', 'running')]);
+  addSession(noCur, SID, '会话 X');
+  await noCur.tick();
+  noCur.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  noCur.doc.querySelector('[data-act="bindpickrow"][data-sid="' + SID + '"]').dispatch('click'); await flush();
+  const savedPick = JSON.parse(noCur.storage.get('mmxdwf-session-bindings'));
+  assert.equal(savedPick.picked.source, 'mmx-picker', 'the picker keeps its own origin');
+  assert.equal(savedPick.picked.sessionId, SID);
+});
+
+test('MMX v10: a one-click record survives a reload, an unknown origin does not', async () => {
+  const key = 'mmxdwf-session-bindings';
+  const f = fixture(mmx, [run('oc', 'running'), run('weird', 'running')], {
+    storage: new Map([[key, JSON.stringify({
+      oc: { host: 'mmx', source: 'mmx-oneclick', sessionId: 'sess-oc' },
+      weird: { host: 'mmx', source: 'mmx-telepathy', sessionId: 'sess-weird' },
+    })]]),
+  });
+  addSession(f, 'sess-oc', '本站会话'); addSession(f, 'sess-weird', '来路不明');
+  await f.tick();
+  const lineOn = (sid) => !!f.doc.querySelector('[data-session-id="' + sid + '"]').querySelector('[data-mmxdwf-line]');
+  assert.ok(lineOn('sess-oc'), 'a one-click record from a previous session still drives the sidebar line');
+  assert.equal(lineOn('sess-weird'), false, 'an origin this client never writes stays isolated');
 });
 
 test('MMX v9: a cached script is dropped when its run leaves /runs', async () => {
