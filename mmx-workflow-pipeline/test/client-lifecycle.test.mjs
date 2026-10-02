@@ -180,7 +180,7 @@ test('MMX: a newer injected bundle replaces the old lifecycle and remains idempo
   f.sandbox.__mmxDwfVersion = 2;
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
-  assert.equal(f.sandbox.__mmxDwfVersion, 6);
+  assert.equal(f.sandbox.__mmxDwfVersion, 7);
   assert.equal(f.doc.getElementById('mmxdwf-modal'), null);
   vm.runInNewContext(readFileSync(client.path, 'utf8'), f.sandbox);
   assert.equal(tornDown, 1);
@@ -977,6 +977,69 @@ test('MMX: an empty sidebar keeps the picker usable and explains itself', async 
   await f.tick();
   f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
   assert.match(f.doc.querySelector('.mmxdwf-mbody').textContent, /没有可绑定的会话|暂无会话/);
+});
+
+function addSession(f, sid, title) {
+  const el = f.doc.createElement('div');
+  el.setAttribute('data-session-id', sid);
+  el.textContent = title;
+  f.doc.body.appendChild(el);
+}
+
+test('MMX: the picker filters hundreds of sidebar sessions as you type', async () => {
+  const f = fixture(mmx, [run('pick-filter', 'running')]);
+  for (let i = 0; i < 40; i++) addSession(f, 'mvs_' + i, '会话 ' + i);
+  addSession(f, 'mvs_deadbeef', '排查 Codex 无法启动');
+  await f.tick();
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 41, 'every session is offered before filtering');
+  const filter = f.doc.querySelector('.mmxdwf-filter');
+  filter.value = 'codex';
+  filter.dispatch('input');
+  assert.deepEqual(f.doc.querySelectorAll('.mmxdwf-srow').map((r) => r.textContent), ['排查 Codex 无法启动'],
+    'the filter matches the title case-insensitively');
+  assert.match(f.doc.querySelector('.mmxdwf-pickhead').textContent, /1 \/ 41/, 'the counter names the subset on screen');
+  filter.value = 'DEADBEEF';
+  filter.dispatch('input');
+  assert.deepEqual(f.doc.querySelectorAll('.mmxdwf-srow').map((r) => r.getAttribute('data-sid')), ['mvs_deadbeef'],
+    'the filter also matches the raw session id');
+  filter.value = '   ';
+  filter.dispatch('input');
+  assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 41, 'whitespace alone is not a filter');
+});
+
+test('MMX: a filter that matches nothing says so instead of showing an empty box', async () => {
+  const f = fixture(mmx, [run('pick-nomatch', 'running')]);
+  addSession(f, 'mvs_a', '第一个会话');
+  await f.tick();
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  const filter = f.doc.querySelector('.mmxdwf-filter');
+  filter.value = 'zzz-不存在';
+  filter.dispatch('input');
+  assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 0);
+  const none = f.doc.querySelector('.mmxdwf-picknone');
+  assert.equal(none.style.display, 'block');
+  assert.match(none.textContent, /zzz-不存在/);
+  filter.value = '会话';
+  filter.dispatch('input');
+  assert.equal(none.style.display, 'none', 'the empty state clears as soon as something matches again');
+  assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 1);
+});
+
+test('MMX: reopening the picker starts from a clean filter', async () => {
+  const f = fixture(mmx, [run('pick-reopen', 'running')]);
+  addSession(f, 'mvs_a', '甲会话');
+  addSession(f, 'mvs_b', '乙会话');
+  await f.tick();
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  const first = f.doc.querySelector('.mmxdwf-filter');
+  first.value = '甲';
+  first.dispatch('input');
+  assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 1);
+  f.doc.querySelector('[data-act="mclose"]').dispatch('click');
+  f.doc.querySelector('[data-act="bindpick"]').dispatch('click'); await flush();
+  assert.equal(f.doc.querySelector('.mmxdwf-filter').value, '', 'a stale query must not silently hide sessions');
+  assert.equal(f.doc.querySelectorAll('.mmxdwf-srow').length, 2);
 });
 
 test('DSH: the client module declares the services it touches for Cordis inject', async () => {

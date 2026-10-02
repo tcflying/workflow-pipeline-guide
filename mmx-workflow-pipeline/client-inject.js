@@ -17,7 +17,7 @@
 // compact single-line agent capsules in columns, script as the first cell, board at the
 // card bottom.
 (function () {
-	var CLIENT_VERSION = 6;
+	var CLIENT_VERSION = 7;
 	if (window.__mmxDwfInstalled && window.__mmxDwfVersion >= CLIENT_VERSION) return;
 	if (window.__mmxDwfInstalled && typeof window.__mmxDwfTeardown === 'function') window.__mmxDwfTeardown();
 	['mmxdwf-modal', 'mmxdwf-pipeline-style'].forEach(function (id) { var old = document.getElementById(id); if (old) old.remove(); });
@@ -147,33 +147,62 @@
 		});
 		return out;
 	}
-	function openSessionPicker(run) {
-		var rid = identity(run);
-		var view = beginView('bindpick', rid);
-		mTitle.textContent = '绑定到会话 · ' + (run.name || rid);
-		mBody.innerHTML = '';
-		var list = sidebarSessions();
-		if (!list.length) {
-			mBody.innerHTML = '<div class="mmxdwf-stats">没有可绑定的会话（侧栏未列出任何带 data-session-id 的会话行）</div>';
-			return;
+		function openSessionPicker(run) {
+			var rid = identity(run);
+			var view = beginView('bindpick', rid);
+			mTitle.textContent = '绑定到会话 · ' + (run.name || rid);
+			mBody.innerHTML = '';
+			var list = sidebarSessions();
+			if (!list.length) {
+				mBody.innerHTML = '<div class="mmxdwf-stats">没有可绑定的会话（侧栏未列出任何带 data-session-id 的会话行）</div>';
+				return;
+			}
+			// A real sidebar carries hundreds of rows (measured: 517 on 3.1.0), so the picker filters
+			// as you type instead of dumping the whole history. Matching is case-insensitive over the
+			// title and the session id, and the counter says which subset is on screen.
+			var head = document.createElement('div');
+			head.className = 'mmxdwf-stats mmxdwf-pickhead';
+			mBody.appendChild(head);
+			var filter = document.createElement('input');
+			filter.className = 'mmxdwf-filter';
+			filter.type = 'search';
+			filter.placeholder = '筛选会话（标题或 ID）';
+			filter.autocomplete = 'off';
+			mBody.appendChild(filter);
+			var rows = document.createElement('div');
+			rows.className = 'mmxdwf-srows';
+			mBody.appendChild(rows);
+			var none = document.createElement('div');
+			none.className = 'mmxdwf-stats mmxdwf-picknone';
+			none.textContent = '没有匹配「' + '' + '」的会话';
+			none.style.display = 'none';
+			mBody.appendChild(none);
+			function paint() {
+				var q = (filter.value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+				rows.innerHTML = '';
+				var shown = 0;
+				list.forEach(function (s) {
+					if (q && s.title.toLowerCase().indexOf(q) < 0 && s.sessionId.toLowerCase().indexOf(q) < 0) return;
+					var row = document.createElement('button');
+					row.className = 'mmxdwf-srow';
+					row.setAttribute('data-act', 'bindpickrow');
+					row.setAttribute('data-sid', s.sessionId);
+					row.setAttribute('data-run', rid);
+					row.type = 'button';
+					row.textContent = s.title;
+					row.title = s.sessionId;
+					rows.appendChild(row);
+					shown++;
+				});
+				head.textContent = '选择这个运行要归属的会话 · ' + (q ? shown + ' / ' + list.length : '共 ' + list.length + ' 个');
+				none.textContent = '没有匹配「' + (filter.value || '').replace(/\s+/g, ' ').trim() + '」的会话';
+				none.style.display = shown ? 'none' : 'block';
+			}
+			filter.addEventListener('input', paint);
+			paint();
+			try { filter.focus(); } catch (e) {}
+			void view;
 		}
-		var head = document.createElement('div');
-		head.className = 'mmxdwf-stats';
-		head.textContent = '选择这个运行要归属的会话 · 共 ' + list.length + ' 个';
-		mBody.appendChild(head);
-		list.forEach(function (s) {
-			var row = document.createElement('button');
-			row.className = 'mmxdwf-srow';
-			row.setAttribute('data-act', 'bindpickrow');
-			row.setAttribute('data-sid', s.sessionId);
-			row.setAttribute('data-run', rid);
-			row.type = 'button';
-			row.textContent = s.title;
-			row.title = s.sessionId;
-			mBody.appendChild(row);
-		});
-		void view;
-	}
 	function unbindRun(run) {
 		if (!run || run.hostSession != null) return;
 		delete bindings[identity(run)];
@@ -296,6 +325,10 @@
 		+ '#' + MODAL_ID + ' .mmxdwf-hcalls{padding:4px 12px 10px;font-size:11.5px;color:var(--wf-muted);}'
 		+ '#' + MODAL_ID + ' .mmxdwf-srow{display:block;width:100%;text-align:left;font:12px/1.5 inherit;color:var(--wf-text);background:var(--wf-subtle);border:1px solid var(--wf-border);border-radius:10px;padding:9px 12px;margin:6px 0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
 		+ '#' + MODAL_ID + ' .mmxdwf-srow:hover{color:var(--wf-strong);border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.065);}'
+		+ '#' + MODAL_ID + ' .mmxdwf-filter{display:block;width:100%;box-sizing:border-box;font:12px/1.5 inherit;color:var(--wf-strong);background:var(--wf-subtle);border:1px solid var(--wf-border);border-radius:10px;padding:8px 12px;margin:8px 0 4px;outline:none;}'
+		+ '#' + MODAL_ID + ' .mmxdwf-filter:focus{border-color:rgba(255,255,255,.28);}'
+		+ '#' + MODAL_ID + ' .mmxdwf-srows{max-height:min(52vh,420px);overflow-y:auto;overscroll-behavior:contain;margin-bottom:4px;}'
+		+ '#' + MODAL_ID + ' .mmxdwf-picknone{margin:10px 0 4px;}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn{font-size:11px;border:1px solid var(--wf-border);background:var(--wf-subtle);color:var(--wf-text);border-radius:8px;padding:3px 9px;cursor:pointer;flex:none;}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:hover{color:var(--wf-strong);border-color:rgba(255,255,255,.22);}'
 		+ '#' + MODAL_ID + ' .mmxdwf-hbtn:disabled{opacity:.5;cursor:default;}'
