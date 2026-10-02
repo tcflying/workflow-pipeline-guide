@@ -100,10 +100,32 @@ node sidecar.mjs --root <工作区根>          # 常驻；--root 可重复
 ### 3.4 引擎部署（给 agent 用的 skill）
 
 ```bash
-node <仓库>/mmx-workflow-pipeline/install-skills.mjs --force   # 引擎版本不符时
+node <仓库>/mmx-workflow-pipeline/install-skills.mjs --force   # 引擎版本不符时（0.8.1）
+```
+
+装到 `~/.minimax/skills/dynamic-workflow`（MiniMax 侧唯一生效的 skill 根）。`--force` 会保留一份带时间戳的旧版备份。校验：
+
+```bash
+grep -o "ENGINE_VERSION = '[^']*'" ~/.minimax/skills/dynamic-workflow/runtime/wf.mjs
 ```
 
 ## 4. 使用
+
+### 4.0 MiniMax 完整使用顺序（三步）
+
+```bash
+# ① 启动 MiniMax（带调试口；已开着就跳过）
+"C:\Program Files\...\MiniMax Code.exe" --remote-debugging-port=9331
+#    或直接 node sidecar.mjs --launch 让 sidecar 代拉
+
+# ② 启动 sidecar（常驻；看到 "workflow renderer attached" 即注入成功）
+cd mmx-workflow-pipeline && node sidecar.mjs --root <工作区根>
+
+# ③ 跑工作流（用装到 MiniMax 的引擎，与 DSH 侧同一引擎）
+node ~/.minimax/skills/dynamic-workflow/runtime/wf.mjs run <script.mjs> --backend file
+```
+
+跑起来后：切到**会话页**（不是新建对话页）→ 顶部出现实时卡片 → 点「🔗 选择会话…」选一个会话 → **左侧栏该会话行下立即出现进度线**（⑂ + 阶段点 + 阶段名），并随阶段实时更新。
 
 ### 4.1 跑一个工作流
 
@@ -129,9 +151,11 @@ node wf.mjs run <script.mjs> --backend file --name 自定义名
 
 侧栏会话行下的 `⑂ 阶段点 阶段名` 是**绑定驱动**的：
 
-- 自动绑定：agent 通过原生来源跑工作流（DSH 宿主变量 / MMX hook）→ 跑完自动归属，无需操作。
-- 手动绑定：点卡片「🔗 绑定当前会话」（仅未绑定运行显示）；或在 🗂 历史 弹窗中对任意运行绑定/解绑。
+- **选会话绑定（MMX 3.1.0 唯一可用路径）**：该构建的 DOM 里没有活动会话标记，所以一键"绑定当前会话"不会渲染；卡片提供「🔗 选择会话…」，列出侧栏全部会话（带 `data-session-id` 的行），点一个即绑定——显式用户操作，不是猜。
+- 一键绑定：宿主暴露活动会话标记时，卡片显示「🔗 绑定当前会话」（DSH 走 `ctx.sessions`，正常可用）。
+- 自动绑定：agent 通过原生来源跑工作流（DSH 宿主变量 / MMX hook）→ 无需操作。**MMX 需先激活原生 hook 插件，见第 6 节已知限制**。
 - 多个运行绑到同一会话时，侧栏显示最新启动的一个；卡片仍全部显示。
+- 换绑/解绑：🗂 历史 弹窗里对任意运行操作。
 
 ### 4.4 新建对话页（MMX）
 
@@ -143,7 +167,8 @@ MiniMax 的新建对话页（mavis-home-content）**不承载任何卡片**—�
 |---|---|
 | MMX 页面没有任何卡片/样式 | sidecar 没活：`netstat -ano | findstr 4231` 查监听；重启 sidecar 看日志出现 `workflow renderer attached` |
 | 卡片长时间不更新 | 窗口最小化时 Chromium 冻结定时器（实测 1500ms→8s 不触发）。已内置 visibilitychange 补拉：把窗口调回前台约 2s 内刷新 |
-| MMX 侧栏无线 | 检查归属：卡片是「未绑定」？点绑定按钮。hook 自动归属需原生 hook 插件激活（见已知限制） |
+| MMX 侧栏无线 | ① 该构建无活动会话标记 → 用卡片「🔗 选择会话…」显式绑定；② 已绑定仍无线：确认绑定的是侧栏可见会话（`data-session-id`），并清 localStorage `mmxdwf-session-bindings` 后重绑 |
+| MMX 跑出来的是旧引擎行为 | `grep -o "ENGINE_VERSION = '[^']*'" ~/.minimax/skills/dynamic-workflow/runtime/wf.mjs` 应为 0.8.1，否则 `install-skills.mjs --force` |
 | DSH 页面没加载插件（官方版） | 检查包 package.json 是否带 `dsh.client` + `exports["./client"]`（见 3.1）；node_modules 是否刷新（pnpm 不覆盖 file: 内容） |
 | `EADDRINUSE 127.0.0.1:43130` | 企业版 appserver 已有实例在跑（app 自愈机制）。不要重复拉起 |
 | 渲染器崩溃循环（官方版） | 近期在 app 运行中动过 node_modules。退出 app → 重新部署 → 再启动 |
@@ -151,7 +176,8 @@ MiniMax 的新建对话页（mavis-home-content）**不承载任何卡片**—�
 
 ## 6. 已知限制
 
-- **MMX 原生 hook 自动归属未激活**：MiniMax 3.1.0 的本地插件安装通道关闭（`LOCAL_PLUGIN_INSTALL_UNSUPPORTED`；本地包拷入 `~/.minimax/plugins/` 不被扫描接纳，仅市场包激活）。hook 插件包已就绪（`plugins/mmx-native-session-hook/`，PreToolUse 中继，观察型 fail-open），激活路径 = 市场发布或官方开放本地安装。在此之前 MMX 侧归属用手动绑定。
+- **MMX 原生 hook 自动归属未激活**：MiniMax 3.1.0 的本地插件安装通道关闭（`LOCAL_PLUGIN_INSTALL_UNSUPPORTED`；本地包拷入 `~/.minimax/plugins/` 不被扫描接纳，仅市场包激活——对照：lark 的市场包 hook 正常物化，本地包全部 0 激活）。hook 插件包已就绪（`plugins/mmx-native-session-hook/`，PreToolUse 中继，观察型 fail-open），激活路径 = 市场发布或官方开放本地安装。**当前用卡片「🔗 选择会话…」手动绑定代替**，功能等价（归属仍可验证），代价是每个运行多一次点击。
+- **MMX 3.1.0 不暴露活动会话标记**：`[data-shortcut-session-active][data-shortcut-session-target]` 在当前构建的 DOM 中不存在，故一键绑定不可用；已用「选择会话…」补齐。宿主若将来恢复该标记，一键绑定会自动重新出现（两者并存不冲突）。
 - DSH 侧栏逐行展开点为宿主限制，未提供。
 - 引擎 `ask()` 无应答 1 小时超时（引擎设计），超时后运行失败属正确行为。
 

@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20261001T191220984Z-48156-981dc7876c8a",
+  "runId": "20261001T191220984Z-48156-981dc7876c8a",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "baseline_snapshot_unreadable",
+        "stage": "baseline-read",
+        "target": "plugins/dynamic-workflow/skills/dynamic-workflow/examples/file-audit.js",
+        "detail": "file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_snapshot_unreadable",
+        "stage": "baseline-read",
+        "target": "mmx-workflow-pipeline/client-inject.js",
+        "detail": "file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_snapshot_unreadable",
+        "stage": "baseline-read",
+        "target": "dsh-workflow-pipeline/client.js",
+        "detail": "file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "baseline_snapshot_unreadable",
+        "stage": "baseline-read",
+        "target": "dsh-workflow-pipeline/package.json",
+        "detail": "file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline-read",
+        "target": "plugins/dynamic-workflow/skills/dynamic-workflow/examples/file-audit.js",
+        "detail": "baseline_snapshot_unreadable: file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline-read",
+        "target": "mmx-workflow-pipeline/client-inject.js",
+        "detail": "baseline_snapshot_unreadable: file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline-read",
+        "target": "dsh-workflow-pipeline/client.js",
+        "detail": "baseline_snapshot_unreadable: file is missing from task baseline",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "baseline-read",
+        "target": "dsh-workflow-pipeline/package.json",
+        "detail": "baseline_snapshot_unreadable: file is missing from task baseline",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "34b45b9e4f0c7f356bc8a4ac739130c4d1c86f15",
+  "diffHash": "d8503b0e8a66b8b005ffbea54fef9e5fffac88206fc5c643732c88baff8dbba4",
+  "rulesVersion": "unavailable",
+  "sessionHash": "188362a7a83a5a42301b6491edbdbf0dcff586b1c2db3193149f535f11d38f7e",
+  "reportRef": ".mimosa/reports/task-review-sess_a84b4818-ecaa-4e1e-a562-0778fd0b6cd9-20261001T191220984Z-48156-981dc7876c8a.json",
+  "events": [],
+  "observedFindingIds": [],
+  "verifiedFiles": [
+    {
+      "file": "plugins/dynamic-workflow/skills/dynamic-workflow/examples/file-audit.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "mmx-workflow-pipeline/client-inject.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "dsh-workflow-pipeline/client.js",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-10-01T19:12:21.403Z"
+}

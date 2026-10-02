@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20261001T191220984Z-48156-981dc7876c8a",
+  "runStatus": "inconclusive",
+  "errors": [
+    "baseline-read:plugins/dynamic-workflow/skills/dynamic-workflow/examples/file-audit.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:mmx-workflow-pipeline/client-inject.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:dsh-workflow-pipeline/client.js: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:dsh-workflow-pipeline/package.json: baseline_snapshot_unreadable: file is missing from task baseline"
+  ],
+  "target": ".",
+  "revision": "34b45b9e4f0c7f356bc8a4ac739130c4d1c86f15",
+  "diffHash": "d8503b0e8a66b8b005ffbea54fef9e5fffac88206fc5c643732c88baff8dbba4",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-10-01T19:12:20.984Z",
+  "timing": {
+    "startedAt": "2026-10-01T19:12:19.411Z",
+    "completedAt": "2026-10-01T19:12:20.984Z",
+    "durationMs": 1573
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "baseline_snapshot_unreadable": 4,
+      "project_check_failed": 4
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_a84b4818-ecaa-4e1e-a562-0778fd0b6cd9-20261001T191220984Z-48156-981dc7876c8a.json"
+}
